@@ -16,6 +16,7 @@ import type { Suite } from '../quality/types.js';
 import { digest, git, hashTree, readJson, writeJson } from './io.js';
 import { Container, platformBin, runnerEnvironment, safeFile } from './runner.js';
 import type { Plan } from './plan.js';
+import { pytestConfigs, pytestInventory, restorePytestInputs } from './pytest.js';
 
 // Both evaluator workspaces are created only after the last model process exits.
 // Record the original inventory even when tests fail on the unchanged base.
@@ -40,7 +41,10 @@ export async function evaluate(
   const inventory: { public: string[]; hidden: string[] } = { public: [], hidden: [] };
 
   let regressionOk = false;
-  let frozenReport = 'final-public.xml';
+  let regressionError: string | undefined;
+  const frozenReport = 'regression-public.xml';
+  let originalNodes: string[] = [];
+  let regressionNodes: string[] | undefined;
   let changedTests: string[] = [];
   const stages = [
     ['base', 'public'],
@@ -50,7 +54,6 @@ export async function evaluate(
     ['regression', 'public'],
   ] as const;
   for (const [revision, kind] of stages) {
-    if (revision === 'regression' && !changedTests.length) continue;
     // A previous test process may have modified its checkout. Each invocation starts on the selected Git tree.
     const root = mkdtempSync(join(realpathSync(tmpdir()), 'frugal-evaluator-'));
     const repo = join(root, 'repo');
@@ -81,35 +84,8 @@ export async function evaluate(
       return values;
     };
     const originalTests = paths(config.paths?.tests ?? ['tests']);
-    const pytestConfigs = [
-      'pytest.ini',
-      '.pytest.ini',
-      'pyproject.toml',
-      'tox.ini',
-      'setup.cfg',
-      'conftest.py',
-    ];
-    const frozenFiles = git(repo, [
-      'ls-tree',
-      '-r',
-      '--name-only',
-      plan.pin,
-      '--',
-      ...originalTests,
-      ...pytestConfigs,
-    ])
-      .split('\n')
-      .filter(Boolean);
-    if (!frozenFiles.length) throw new Error('Empty frozen regression inventory');
-    if (revision === 'final' && kind === 'public') {
-      changedTests = git(repo, ['diff', '--name-only', plan.pin, finalCommit, '--', ...frozenFiles])
-        .split('\n')
-        .filter(Boolean);
-    }
-    if (revision === 'regression') {
-      // Re-run original test bodies against final production code, even when candidate tests reuse the same IDs.
-      git(repo, ['restore', '--source', plan.pin, '--staged', '--worktree', '--', ...frozenFiles]);
-    }
+    if (revision === 'regression')
+      changedTests = restorePytestInputs(repo, plan.pin, finalCommit, originalTests, originalNodes);
     const env = runnerEnvironment(root);
     env.PYTHONPATH = paths(config.paths?.src ?? ['.'])
       .map((p) => join(repo, p))
@@ -127,12 +103,17 @@ export async function evaluate(
     }
     const pytestConfig = pytestConfigs.slice(0, -1).find((file) => existsSync(join(repo, file)));
     if (pytestConfig) args.push('-c', pytestConfig);
+    const collection =
+      kind === 'public' && revision !== 'final'
+        ? pytestInventory(root, env, revision === 'regression' ? originalNodes : undefined)
+        : undefined;
     const result = await container.exec(
       [
         'sh',
         '-c',
         `exec ${config.test.command} "$@"`,
         'frugal-test',
+        ...(collection?.args ?? []),
         ...args,
         '--rootdir=.',
         '--junitxml',
@@ -148,29 +129,39 @@ export async function evaluate(
     );
     const xml = safeFile(root, report);
     writeFileSync(join(dir, `${name}.xml`), xml);
+    if (revision === 'regression') {
+      try {
+        regressionNodes = collection?.read();
+        const cases = parseReport('junit', xml.toString('utf8'));
+        regressionOk =
+          result.code === 0 &&
+          JSON.stringify(regressionNodes) === JSON.stringify(originalNodes) &&
+          cases.size === inventory.public.length &&
+          inventory.public.every((id) => cases.get(id) === 'passed');
+      } catch (error) {
+        regressionError = String(error);
+      }
+      continue;
+    }
     const cases = parseReport('junit', xml.toString('utf8'));
     if (revision === 'base') {
       inventory[kind] = Array.from(cases.keys()).sort();
-      if (
-        kind === 'public' &&
-        (result.code !== 0 || [...cases.values()].some((s) => s !== 'passed'))
-      )
-        throw new Error('Original public regression suite failed');
-    } else {
       if (kind === 'public') {
-        regressionOk =
-          result.code === 0 && inventory.public.every((id) => cases.get(id) === 'passed');
-        frozenReport = `${name}.xml`;
+        if (result.code !== 0 || [...cases.values()].some((s) => s !== 'passed'))
+          throw new Error('Original public regression suite failed');
+        originalNodes = collection?.read() ?? [];
+        if (new Set(originalNodes).size !== cases.size || originalNodes.length !== cases.size)
+          throw new Error('Original pytest collection does not match its JUnit inventory');
       }
-      if (revision === 'final')
-        suites.push({
-          kind,
-          format: 'junit',
-          path: `${name}.xml`,
-          sha256: digest(xml),
-          exit_code: result.code,
-          expected_tests: inventory[kind],
-        });
+    } else {
+      suites.push({
+        kind,
+        format: 'junit',
+        path: `${name}.xml`,
+        sha256: digest(xml),
+        exit_code: result.code,
+        expected_tests: inventory[kind],
+      });
     }
   }
   writeJson(join(dir, 'frozen-regression.json'), {
@@ -179,6 +170,9 @@ export async function evaluate(
     final_commit: finalCommit,
     changed: changedTests,
     expected_tests: inventory.public,
+    expected_nodeids: originalNodes,
+    collected_nodeids: regressionNodes,
+    error: regressionError,
     path: frozenReport,
     report_sha256: hashTree(join(dir, frozenReport)),
   });
