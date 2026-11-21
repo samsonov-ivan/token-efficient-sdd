@@ -1,0 +1,198 @@
+{
+  "purpose": "synthetic dry-run",
+  "implementation": "bf417ba3236a0bee86ff265225624a4e17ce5c8c",
+  "fixture_controller": "d70fcf4056713e6174f5c4e9630ef30677bd24f3",
+  "feature": "example-change",
+  "input_commit": "4cf17630fc641dc91e23afff27e5338488d498d1",
+  "model": "mock/replay",
+  "provider": "mock",
+  "eligible_for_token_savings": false,
+  "arms": [
+    {
+      "run_id": "h00-1-opt-a1",
+      "enabled_flags": [],
+      "apply": [
+        {
+          "task": null,
+          "session_id": "ses_h00-1-opt-a1_apply_0",
+          "message_id": "msg_ses_h00-1-opt-a1_apply_0"
+        }
+      ],
+      "stages": [
+        "spec",
+        "apply",
+        "review",
+        "verify"
+      ],
+      "verify_pass": true,
+      "replay_call_count": 4,
+      "replay_rpt": 64,
+      "calls_sha256": "f60b2665a03a665dd9cc093b7a6907debc04a72d54f0b232911fd2de117b0bbc"
+    },
+    {
+      "run_id": "h01-1-opt-a1",
+      "enabled_flags": [
+        "capsule"
+      ],
+      "apply": [
+        {
+          "task": "1.1",
+          "session_id": "ses_h01-1-opt-a1_apply_1.1",
+          "message_id": "msg_ses_h01-1-opt-a1_apply_1.1"
+        },
+        {
+          "task": "1.2",
+          "session_id": "ses_h01-1-opt-a1_apply_1.1",
+          "message_id": "msg_ses_h01-1-opt-a1_apply_1.1:2"
+        }
+      ],
+      "stages": [
+        "spec",
+        "apply",
+        "apply",
+        "review",
+        "verify"
+      ],
+      "verify_pass": true,
+      "replay_call_count": 5,
+      "replay_rpt": 80,
+      "calls_sha256": "8020dee94733a59a0619f78a94812e7fdaa369e0cc590f33aa4125280e30d37a"
+    },
+    {
+      "run_id": "h10-1-opt-a1",
+      "enabled_flags": [
+        "session_per_task"
+      ],
+      "apply": [
+        {
+          "task": "1.1",
+          "session_id": "ses_h10-1-opt-a1_apply_1.1",
+          "message_id": "msg_ses_h10-1-opt-a1_apply_1.1"
+        },
+        {
+          "task": "1.2",
+          "session_id": "ses_h10-1-opt-a1_apply_1.2",
+          "message_id": "msg_ses_h10-1-opt-a1_apply_1.2"
+        }
+      ],
+      "stages": [
+        "spec",
+        "apply",
+        "apply",
+        "review",
+        "verify"
+      ],
+      "verify_pass": true,
+      "replay_call_count": 5,
+      "replay_rpt": 80,
+      "calls_sha256": "324e92bdd838dd53a096ac9947657de0fe1af8b8dcce413bba8d71660da82bde"
+    },
+    {
+      "run_id": "h11-1-opt-a1",
+      "enabled_flags": [
+        "capsule",
+        "session_per_task"
+      ],
+      "apply": [
+        {
+          "task": "1.1",
+          "session_id": "ses_h11-1-opt-a1_apply_1.1",
+          "message_id": "msg_ses_h11-1-opt-a1_apply_1.1"
+        },
+        {
+          "task": "1.2",
+          "session_id": "ses_h11-1-opt-a1_apply_1.2",
+          "message_id": "msg_ses_h11-1-opt-a1_apply_1.2"
+        }
+      ],
+      "stages": [
+        "spec",
+        "apply",
+        "apply",
+        "review",
+        "verify"
+      ],
+      "verify_pass": true,
+      "replay_call_count": 5,
+      "replay_rpt": 80,
+      "calls_sha256": "956cd4ec0f65352d8d9ea7862b4abb2309d949cb39a74e0f5b389b5c5aa5049b"
+    },
+    {
+      "run_id": "hpair-1-base-a1",
+      "enabled_flags": [],
+      "apply": [
+        {
+          "task": null,
+          "session_id": "ses_hpair-1-base-a1_apply_0",
+          "message_id": "msg_ses_hpair-1-base-a1_apply_0"
+        }
+      ],
+      "stages": [
+        "spec",
+        "apply",
+        "review",
+        "verify"
+      ],
+      "verify_pass": true,
+      "replay_call_count": 4,
+      "replay_rpt": 64,
+      "calls_sha256": "f22d92c9226470b5b4586607be0991fa19c972cf7231622c3aca0256318d5a14"
+    },
+    {
+      "run_id": "hpair-1-opt-a1",
+      "enabled_flags": [
+        "capsule",
+        "checklist_review",
+        "incremental_review",
+        "session_per_task",
+        "targeted_fix"
+      ],
+      "apply": [
+        {
+          "task": "1.1",
+          "session_id": "ses_hpair-1-opt-a1_apply_1.1",
+          "message_id": "msg_ses_hpair-1-opt-a1_apply_1.1"
+        },
+        {
+          "task": "1.2",
+          "session_id": "ses_hpair-1-opt-a1_apply_1.2",
+          "message_id": "msg_ses_hpair-1-opt-a1_apply_1.2"
+        }
+      ],
+      "stages": [
+        "spec",
+        "apply",
+        "apply",
+        "review",
+        "fix",
+        "review",
+        "review",
+        "verify"
+      ],
+      "verify_pass": true,
+      "replay_call_count": 8,
+      "replay_rpt": 128,
+      "calls_sha256": "260246be8d7e754e65419905efa359ceb0f4eaf95ccd0dd3d277f358253a48be",
+      "review_rounds": [
+        {
+          "scope": "full",
+          "verdict": "changes_requested",
+          "final": false,
+          "tree": "f1e633f390fcc57184e3b4f7eea0d2fed42e6663"
+        },
+        {
+          "scope": "delta",
+          "verdict": "approved",
+          "final": false,
+          "tree": "1300d2c6b933250cad9ae2bade224c9aee6bf9f1"
+        },
+        {
+          "scope": "full",
+          "verdict": "approved",
+          "final": true,
+          "tree": "1300d2c6b933250cad9ae2bade224c9aee6bf9f1"
+        }
+      ]
+    }
+  ]
+}
