@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "frugal",
+  "type": "object",
+  "required": [
+    "version",
+    "flags"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "language": {
+      "type": "string",
+      "minLength": 1
+    },
+    "test": {
+      "type": "object",
+      "required": [
+        "command",
+        "report"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "per_task_selector": {
+          "type": "string",
+          "minLength": 1
+        },
+        "report": {
+          "enum": [
+            "junit",
+            "json",
+            "tap",
+            "go",
+            "surefire"
+          ]
+        }
+      }
+    },
+    "lint": {
+      "type": "object",
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "typecheck": {
+      "type": "object",
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "profile": {
+      "enum": [
+        "small",
+        "large",
+        "auto"
+      ]
+    },
+    "flags": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "integer",
+            "minimum": 1
+          },
+          {
+            "const": "auto"
+          }
+        ]
+      }
+    },
+    "paths": {
+      "type": "object",
+      "required": [
+        "src",
+        "tests"
+      ],
+      "properties": {
+        "src": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

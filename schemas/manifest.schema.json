@@ -1,0 +1,319 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "manifest",
+  "type": "object",
+  "required": [
+    "run_id",
+    "pair_id",
+    "feature_id",
+    "dry_run",
+    "branch",
+    "mode",
+    "status",
+    "profile",
+    "flags",
+    "model",
+    "provider",
+    "params",
+    "versions",
+    "repo",
+    "config_hash",
+    "baseline_hash",
+    "requirements_hash",
+    "test_oracle_hash",
+    "started_at",
+    "finished_at",
+    "final_commit",
+    "stages",
+    "prices",
+    "gates",
+    "hidden",
+    "notes"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pair_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "feature_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^(base|opt|ablation-[a-zA-Z0-9_-]+)$"
+    },
+    "mode": {
+      "enum": [
+        "baseline",
+        "optimized",
+        "ablation"
+      ]
+    },
+    "status": {
+      "enum": [
+        "running",
+        "complete",
+        "failed",
+        "interrupted"
+      ]
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "flags": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "integer",
+            "minimum": 1
+          },
+          {
+            "const": "auto"
+          }
+        ]
+      }
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1
+    },
+    "params": {
+      "type": "object"
+    },
+    "versions": {
+      "type": "object",
+      "required": [
+        "opencode",
+        "openspec",
+        "frugal",
+        "node",
+        "python",
+        "test_runner"
+      ],
+      "properties": {
+        "opencode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "openspec": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frugal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "python": {
+          "type": "string",
+          "minLength": 1
+        },
+        "test_runner": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "repo": {
+      "type": "object",
+      "required": [
+        "url",
+        "commit"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "config_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requirements_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "test_oracle_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "started_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "final_commit": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "stage",
+          "session_id",
+          "started_at",
+          "finished_at"
+        ],
+        "properties": {
+          "stage": {
+            "enum": [
+              "propose",
+              "spec",
+              "specs",
+              "design",
+              "tasks",
+              "apply",
+              "review",
+              "fix",
+              "verify",
+              "other"
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "started_at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "task": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "review_iter": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "prices": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "gates": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "hidden": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "baseline"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "branch": {
+            "const": "base"
+          },
+          "flags": {
+            "type": "object",
+            "additionalProperties": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "complete"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "finished_at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "final_commit": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ]
+}
