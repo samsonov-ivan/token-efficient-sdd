@@ -12,7 +12,8 @@ tar -xf "$bundle/tree.tar" -C "$bundle/repo"
 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
 export GIT_AUTHOR_NAME='Frugal benchmark' GIT_AUTHOR_EMAIL='benchmark@example.invalid'
 export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME" GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
-export GIT_AUTHOR_DATE='2026-11-21T00:00:00Z' GIT_COMMITTER_DATE="$GIT_AUTHOR_DATE"
+export GIT_AUTHOR_DATE='2026-11-21T00:00:00Z'
+export GIT_COMMITTER_DATE="$GIT_AUTHOR_DATE"
 git init -q --template= --initial-branch=main --object-format=sha1 "$bundle/repo"
 git -C "$bundle/repo" add -f -- .
 git -C "$bundle/repo" -c commit.gpgsign=false commit -q -m 'chore: freeze public minibank benchmark'
