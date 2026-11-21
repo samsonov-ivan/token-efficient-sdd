@@ -19,6 +19,7 @@ import { parseArgs } from 'node:util';
 import { gates } from './gates.js';
 import { goCatalog, smokeReceipt, validSubscriptionLedger, verifySmoke } from './harness/go.js';
 import { startUsageRelay } from './harness/relay.js';
+import { captureToolOutput } from './harness/tool-output.js';
 import { evaluate, restoreFinal } from './harness/evaluate.js';
 import {
   activeOwner,
@@ -278,6 +279,15 @@ function stageWriter(m: Manifest, runDir: string, request: Invocation, start: st
 
 async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, root: string) {
   const env = runnerEnvironment(root);
+  const compressTools = m.mode !== 'baseline' && m.flags.tool_output_compression === true;
+  if (compressTools) env.FRUGAL_TOOL_OUTPUT_COMPRESSION = '1';
+  const installPlugin = (name: string) => {
+    const plugin = join(plan.project, 'packages/opencode-plugin/dist/index.js');
+    const plugins = join(env.OPENCODE_CONFIG_DIR, 'plugins');
+    mkdirSync(plugins, { recursive: true });
+    copyFileSync(plugin, join(plugins, name));
+    m.metering.plugin_sha256 = hashTree(plugin);
+  };
   let relay: Awaited<ReturnType<typeof startUsageRelay>> | undefined;
   const closeRelay = async () => {
     if (relay) {
@@ -299,11 +309,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
         }
       : await goCatalog(m.model);
     m.prices = info.prices;
-    const plugin = join(plan.project, 'packages/opencode-plugin/dist/index.js');
-    const plugins = join(env.OPENCODE_CONFIG_DIR, 'plugins');
-    mkdirSync(plugins, { recursive: true });
-    copyFileSync(plugin, join(plugins, 'frugal-correlation.js'));
-    m.metering.plugin_sha256 = hashTree(plugin);
+    installPlugin('frugal-correlation.js');
     env.FRUGAL_USAGE_CORRELATION = '1';
     writeJson(join(runDir, 'go-preflight.json'), {
       ...info,
@@ -336,7 +342,10 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       await closeRelay();
       throw error;
     }
-  } else createSettings(env, m.model, plan.dry ? null : plan.endpoint, plan.limits);
+  } else {
+    if (compressTools) installPlugin('frugal-compression.js');
+    createSettings(env, m.model, plan.dry ? null : plan.endpoint, plan.limits);
+  }
   const c = m.isolation.image ? new Container(root, repo, env, m.isolation.image, m.run_id) : null;
   const localEnv = { ...env, PATH: process.env.PATH, ...gitAuthor };
   const invokeTool = (name: string, args: string[]) =>
@@ -412,11 +421,22 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       const writer = stageWriter(m, runDir, request, now());
       if (!request.args.includes('--title')) throw new Error('Missing fixed session title');
       let result: ReplayResult;
+      let archiveError: unknown;
       if (plan.dry && !plan.fixture) {
         result = replay(repo, plan.feature, runDir, m.run_id, request);
         for (const line of result.stdout.trimEnd().split('\n')) writer.line(line, false);
       } else {
         if (!c) throw new Error('Live opencode requires container isolation');
+        const credentials = relay
+          ? []
+          : plan.endpoint
+            ? ['FRUGAL_PROVIDER_API_KEY']
+            : credentialKeys(m.provider);
+        const secretEnv = relay ? { FRUGAL_RELAY_TOKEN: relay.token } : undefined;
+        const archiveSecrets = [
+          ...credentials.map((name) => process.env[name] ?? ''),
+          ...Object.values(secretEnv ?? {}),
+        ];
         result = await c.exec(
           [
             'timeout',
@@ -427,13 +447,19 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
           ],
           {
             network: true,
-            credentials: relay
-              ? []
-              : plan.endpoint
-                ? ['FRUGAL_PROVIDER_API_KEY']
-                : credentialKeys(m.provider),
-            secretEnv: relay ? { FRUGAL_RELAY_TOKEN: relay.token } : undefined,
-            onLine: writer.line,
+            credentials,
+            secretEnv,
+            onLine: compressTools
+              ? (line, stderr) => {
+                  writer.line(line, stderr);
+                  if (stderr || archiveError) return;
+                  try {
+                    captureToolOutput(repo, runDir, line, archiveSecrets);
+                  } catch (error) {
+                    archiveError = error;
+                  }
+                }
+              : writer.line,
           },
         );
       }
@@ -445,6 +471,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
         );
       }
       if (interrupted) throw new Error('Interrupted during stage');
+      if (archiveError) throw archiveError;
       return result;
     };
     if (plan.goSmoke && plan.goRelay) {
@@ -518,6 +545,8 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
           )
         : Promise.resolve(git(repo, args, gitAuthor));
     const tree = await snapshot();
+    if (compressTools && git(repo, ['ls-tree', '-r', '--name-only', tree, '--', '.frugal/logs']))
+      throw new Error('Full tool logs cannot be tracked in the final snapshot');
     m.final_commit = await finalGit([
       'commit-tree',
       tree,
