@@ -1,6 +1,15 @@
-import { mkdtempSync, mkdirSync, cpSync, existsSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { run, type RunManifest } from '../src/run.js';
 import { git, readJson, writeJson } from '../src/harness/io.js';
@@ -77,6 +86,13 @@ describe('isolated run lifecycle', () => {
       flags: { capsule: true },
     });
     expect(ma.isolation.root).not.toBe(mb.isolation.root);
+    for (const manifest of [ma, mb]) {
+      const { root } = manifest.isolation;
+      if (!root) throw new Error('Missing isolated performer root');
+      expect(dirname(root)).toBe(realpathSync(tmpdir()));
+      expect(basename(root)).toMatch(/^frugal-arm-[0-9a-f]{10}$/);
+      expect(statSync(root).mode & 0o777).toBe(0o700);
+    }
     writeFileSync(join(ma.isolation.root, 'repo', 'only-in-first'), 'private');
     expect(existsSync(join(mb.isolation.root, 'repo', 'only-in-first'))).toBe(false);
     expect(existsSync(join(mb.isolation.root, 'repo', 'hidden_tests'))).toBe(false);

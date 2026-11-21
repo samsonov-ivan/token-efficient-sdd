@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import {
   appendFileSync,
   copyFileSync,
@@ -79,6 +79,17 @@ const unknownVersions = (sha: string): Version => ({
 function childOf(parent: string, child: string) {
   const rel = relative(parent, child);
   return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !rel.startsWith(sep));
+}
+function createArmRoot(temp: string) {
+  for (;;) {
+    const root = join(temp, `frugal-arm-${randomBytes(5).toString('hex')}`);
+    try {
+      mkdirSync(root, { mode: 0o700 });
+      return root;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+  }
 }
 function atomicNew(file: string, value: unknown) {
   mkdirSync(dirname(file), { recursive: true });
@@ -631,7 +642,7 @@ export async function run(argv: string[]): Promise<number> {
         continue;
       }
       const m = initial(plan, slot, id, assetsHash, image, prior, config, configHash);
-      const root = mkdtempSync(join(temp, 'frugal-arm-'));
+      const root = createArmRoot(temp);
       const repo = join(root, 'repo');
       m.isolation.root = root;
       const reservation = mkdtempSync(join(plan.out, '.reservation-'));
