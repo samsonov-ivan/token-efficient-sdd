@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readChange } from '../src/quality/change.js';
 import { qualityCommand } from '../src/quality/command.js';
 import { pythonTestContext } from '../src/quality/python.js';
+import { prepareRequest } from '../src/quality/reviewer.js';
 import { Snapshot } from '../src/quality/snapshot.js';
 import { parseReport } from '../src/quality/suites.js';
 import type { Change, Evidence, Expected } from '../src/quality/types.js';
@@ -176,6 +177,57 @@ describe('final snapshot quality', () => {
     expect(g.metrics.Cons).toBe(0);
     expect(g.checks.semantic.errors.join()).toContain('exclusive');
     expect(g.checks.review.ok).toBe(false);
+  });
+  it('binds an incremental approval to a separate full sanity review on the same tree', () => {
+    const e = structuredClone(f.evidence);
+    const approved = { ...e.review[0], scope: 'full' };
+    e.review = [approved, { ...approved, round: 2, sanity: true }];
+    const baselineRequest = prepareRequest(f.snapshot, model, expected, e, f.root);
+    expect(run(e).checks.review.ok).toBe(false);
+
+    e.review_protocol = 'incremental';
+    expect(run(e).checks.review.ok).toBe(true);
+    expect(prepareRequest(f.snapshot, model, expected, e, f.root).request_sha256).not.toBe(
+      baselineRequest.request_sha256,
+    );
+
+    e.review[0].tree = '1'.repeat(40);
+    expect(run(e).checks.review.errors).toContain('Incomplete review evidence in round 1');
+  });
+  it('accepts full review, a changed-tree delta and a full sanity check in order', () => {
+    const e = structuredClone(f.evidence);
+    e.review_protocol = 'incremental';
+    const previousTree = '1'.repeat(40);
+    const currentTree = f.snapshot.tree;
+    const summary = 'Checked the inclusive endpoint.';
+    e.review = [
+      { round: 1, tree: previousTree, scope: 'full', verdict: 'fix', summary },
+      {
+        round: 2,
+        tree: currentTree,
+        previous_tree: previousTree,
+        scope: 'delta',
+        verdict: 'pass',
+        summary,
+      },
+      { round: 3, tree: currentTree, scope: 'full', sanity: true, verdict: 'pass', summary },
+    ];
+    expect(run(e).checks.review.ok).toBe(true);
+
+    e.review[1].previous_tree = '2'.repeat(40);
+    expect(run(e).checks.review.errors).toContain(
+      'Review delta is not bound to the prior fix in round 2',
+    );
+
+    e.review[0].tree = currentTree;
+    expect(run(e).checks.review.errors).toContain(
+      'Review fix did not produce a new tree before round 2',
+    );
+
+    e.review[2].sanity = false;
+    expect(run(e).checks.review.errors).toContain(
+      'Incremental review requires a full final sanity review of the evaluated tree',
+    );
   });
   it(
     'finds a contradictory boundary in strict-valid design without a supplied negative verdict',
