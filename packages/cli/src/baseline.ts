@@ -12,6 +12,8 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { basename, join, relative, sep } from 'node:path';
+import { invocationStem } from './harness/replay.js';
+import type { TaskApplyInput } from './task-sessions.js';
 
 export type BaselineStage = 'spec' | 'apply' | 'review' | 'fix' | 'verify';
 
@@ -19,6 +21,8 @@ export interface BaselineRequest {
   stage: BaselineStage;
   args: string[];
   reviewIter?: number;
+  task?: string;
+  attempt?: number;
 }
 
 interface CommandResult {
@@ -48,6 +52,9 @@ interface Snapshot {
 interface StageEvidence {
   stage: BaselineStage;
   review_iter?: number;
+  task?: string;
+  attempt?: number;
+  prompt?: string;
   input: Snapshot;
   output?: Snapshot;
   transcript: string;
@@ -113,7 +120,11 @@ async function putOnce(path: string, data: Buffer | string) {
   }
 }
 
-async function capture(opts: BaselineOptions): Promise<Snapshot> {
+async function capture(
+  opts: BaselineOptions,
+  archive: string,
+  requireTree: boolean,
+): Promise<Snapshot> {
   const entries = [];
   for (const path of await filesIn(opts.repo, true)) {
     const full = join(opts.repo, path);
@@ -121,7 +132,7 @@ async function capture(opts: BaselineOptions): Promise<Snapshot> {
     const symlink = stat.isSymbolicLink();
     const bytes = symlink ? Buffer.from(await readlink(full)) : await readFile(full);
     const hash = sha256(bytes);
-    await putOnce(join(opts.runDir, 'b0', 'blobs', hash), bytes);
+    await putOnce(join(archive, 'blobs', hash), bytes);
     entries.push({
       path,
       mode: symlink ? '120000' : stat.mode & 0o111 ? '100755' : '100644',
@@ -130,9 +141,12 @@ async function capture(opts: BaselineOptions): Promise<Snapshot> {
   }
   const json = `${JSON.stringify(entries)}\n`;
   const content = sha256(json);
-  await putOnce(join(opts.runDir, 'b0', 'snapshots', `${content}.json`), json);
+  await putOnce(join(archive, 'snapshots', `${content}.json`), json);
   const tree = await opts.snapshot?.();
-  if (tree !== undefined && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(tree))
+  if (
+    (requireTree || tree !== undefined) &&
+    (typeof tree !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(tree))
+  )
     throw new Error('Invalid Git tree id');
   return tree ? { content, tree } : { content };
 }
@@ -269,14 +283,26 @@ function verdict(answer: string, stage: 'review' | 'verify') {
 }
 
 /** Raw streams and exports are recorded by invoke before a command returns. */
-export async function executeBaseline(opts: BaselineOptions) {
+export function executeBaseline(opts: BaselineOptions) {
+  return executeNativePipeline(opts);
+}
+
+interface NativeTaskPlan {
+  flags: { session_per_task: boolean; capsule: boolean };
+  run(
+    apply: (input: TaskApplyInput) => Promise<{ sessionId: string; handoff: string }>,
+  ): Promise<void>;
+}
+
+export async function executeNativePipeline(opts: BaselineOptions, taskPlan?: NativeTaskPlan) {
   if (
     !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(opts.feature) ||
     !opts.requirement.trim() ||
     !/^[^/\s]+\/[^\s]+$/.test(opts.model)
   )
     throw new Error('Invalid baseline inputs');
-  const archive = join(opts.runDir, 'b0');
+  const archiveName = taskPlan ? 'opt' : 'b0';
+  const archive = join(opts.runDir, archiveName);
   // Refuse reusing stage evidence from another attempt.
   await mkdir(archive);
   for (const dir of ['stages', 'snapshots', 'blobs']) await mkdir(join(archive, dir));
@@ -301,9 +327,11 @@ export async function executeBaseline(opts: BaselineOptions) {
   const stages: StageEvidence[] = [];
   const reviews: Review[] = [];
   const sessions = new Set<string>();
+  const applySessions = new Set<string>();
   const persist = async (status: 'running' | 'completed' | 'failed', error?: string) => {
-    await atomicJson(join(opts.runDir, 'baseline.json'), {
-      protocol: 'B0',
+    await atomicJson(join(opts.runDir, taskPlan ? 'optimized.json' : 'baseline.json'), {
+      protocol: taskPlan ? 'task-apply' : 'B0',
+      ...(taskPlan ? { flags: taskPlan.flags } : {}),
       assets_hash: assetsHash,
       skills: skills.hashes,
       status,
@@ -313,12 +341,22 @@ export async function executeBaseline(opts: BaselineOptions) {
     await atomicJson(join(archive, 'quality-review.json'), reviews);
   };
 
-  const call = async (stage: BaselineStage, round?: number, feedback = '') => {
+  const call = async (
+    stage: BaselineStage,
+    round?: number,
+    feedback = '',
+    task?: TaskApplyInput,
+  ) => {
     const iteration = round ? `-${round}` : '';
-    const stem = stage + iteration;
-    const log = `b0/stages/${stem}.md`;
-    const input = await capture(opts);
-    const entry: StageEvidence = { stage, review_iter: round, input, transcript: log };
+    const taskInfo = task ? { task: task.taskId, attempt: task.attempt } : {};
+    const stem = task ? invocationStem({ stage, ...taskInfo }) : stage + iteration;
+    const log = `${archiveName}/stages/${stem}.md`;
+    const input = await capture(opts, archive, taskPlan !== undefined);
+    const entry: StageEvidence = { stage, review_iter: round, ...taskInfo, input, transcript: log };
+    if (task) {
+      entry.prompt = `${archiveName}/stages/${stem}.input.md`;
+      await writeFile(join(opts.runDir, entry.prompt), task.prompt, { flag: 'wx' });
+    }
     stages.push(entry);
     await persist('running');
     const values: Record<string, string> = {
@@ -327,10 +365,9 @@ export async function executeBaseline(opts: BaselineOptions) {
       review: feedback,
     };
     const template = prompts[stage === 'spec' ? 'propose' : stage];
-    const prompt = template.replace(
-      /\{\{(change|brief|review)\}\}/g,
-      (_, field: string) => values[field],
-    );
+    const prompt =
+      task?.prompt ??
+      template.replace(/\{\{(change|brief|review)\}\}/g, (_, field: string) => values[field]);
     const args = [
       'run',
       '--format',
@@ -340,18 +377,28 @@ export async function executeBaseline(opts: BaselineOptions) {
       '--title',
       `${basename(opts.runDir)}/${stem}`,
     ];
-    if (stage === 'review' || stage === 'fix')
+    if (task) {
+      args.push('--agent', 'build');
+      if (task.sessionId) args.push('--session', task.sessionId);
+    } else if (stage === 'review' || stage === 'fix')
       args.push('--agent', stage === 'review' ? 'base-reviewer' : 'base-fixer');
     else args.push('--command', skills.names[stage]);
     args.push('--', prompt);
-    const result = await opts.invoke({ stage, args, reviewIter: round });
+    const result = await opts.invoke({ stage, args, reviewIter: round, ...taskInfo });
     const reply = stageReply(result);
     await writeFile(join(opts.runDir, log), `${reply.answer}\n`, { flag: 'wx' });
     entry.session_id = reply.session;
-    if (sessions.has(reply.session))
-      throw new Error(`Root session reused across B0 stages: ${reply.session}`);
+    if (task?.sessionId) {
+      if (task.sessionId !== reply.session || !applySessions.has(reply.session))
+        throw new Error(`Unexpected apply continuation: ${reply.session}`);
+    } else if (sessions.has(reply.session)) {
+      throw new Error(
+        `Root session reused across ${taskPlan ? 'native' : 'B0'} stages: ${reply.session}`,
+      );
+    }
     sessions.add(reply.session);
-    const output = await capture(opts);
+    if (task) applySessions.add(reply.session);
+    const output = await capture(opts, archive, taskPlan !== undefined);
     entry.output = output;
     await persist('running');
     if (
@@ -369,7 +416,15 @@ export async function executeBaseline(opts: BaselineOptions) {
   try {
     await call('spec');
     await checkArtifacts(opts.repo, opts.feature, false);
-    await call('apply');
+    if (taskPlan) {
+      await taskPlan.run(async (task) => {
+        const step = await call('apply', undefined, '', task);
+        return { sessionId: step.session, handoff: step.answer };
+      });
+      await checkArtifacts(opts.repo, opts.feature, true);
+    } else {
+      await call('apply');
+    }
     let accepted = false;
     for (let round = 1; round <= 5; round++) {
       const review = await call('review', round);
