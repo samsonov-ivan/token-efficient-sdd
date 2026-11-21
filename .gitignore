@@ -1,0 +1,8 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+bench/runs/*
+!bench/runs/summary/
+!bench/runs/summary.*
