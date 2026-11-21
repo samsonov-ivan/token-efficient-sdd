@@ -19,6 +19,7 @@ interface Stage {
   review_iter: number | null;
   start: string | null;
   end: string | null;
+  messages?: Set<string>;
 }
 const other: Stage = { stage: 'other', task: null, review_iter: null, start: null, end: null };
 const stages = new Set([
@@ -48,6 +49,10 @@ function stageMap(manifest: Entry) {
       review_iter: typeof iter === 'number' ? iter : null,
       start: timestamp(info.started_at),
       end: timestamp(info.finished_at ?? info.ended_at),
+      messages:
+        Array.isArray(info.message_ids) && info.message_ids.length
+          ? new Set(info.message_ids.map(id))
+          : undefined,
     };
     const key = id(session);
     const list = result.get(key) ?? [];
@@ -69,6 +74,7 @@ function findStage(
   map: Map<string, Stage[]>,
   data: Inputs,
   session: string,
+  message: string | null,
   ts: string | null,
 ): Stage {
   const visited = new Set<string>();
@@ -79,7 +85,22 @@ function findStage(
       return other;
     }
     visited.add(current);
-    const all = map.get(current);
+    let all = map.get(current);
+    if (all?.length && current === session && message && all.some((s) => s.messages)) {
+      const exact = all.filter((s) => s.messages?.has(message));
+      if (exact.length === 1) return exact[0];
+      if (exact.length > 1) {
+        data.issues.add(`session/${session}: multiple stages claim message ${message}`);
+        return other;
+      }
+      // Old manifests lack message identities. Only unbound stage entries
+      // can still own this call when old and new records coexist.
+      all = all.filter((s) => !s.messages);
+      if (!all.length) {
+        data.issues.add(`session/${session}: no stage claims message ${message}`);
+        return other;
+      }
+    }
     if (all?.length) {
       const options =
         all.length === 1
@@ -89,6 +110,23 @@ function findStage(
             );
       if (options.length === 1) return options[0];
       const ambiguous = options.length ? options : all;
+      if (all.some((s) => s.messages)) {
+        // An indirect child or a standalone transport call can lack a root
+        // message ID. Repeated attempts of the same task still agree on labels.
+        const [candidate] = ambiguous;
+        if (
+          ambiguous.every(
+            (s) =>
+              s.stage === candidate.stage &&
+              s.task === candidate.task &&
+              s.review_iter === candidate.review_iter,
+          )
+        )
+          return candidate;
+        data.issues.add(
+          `session/${session}: ambiguous stage for ${message ?? 'unlinked call'} in ${current}`,
+        );
+      }
       if (ambiguous.every((s) => ['propose', 'specs', 'design', 'tasks', 'spec'].includes(s.stage)))
         return { ...other, stage: 'spec' };
       return other;
@@ -183,7 +221,7 @@ function ledger(manifest: Entry, data: Inputs) {
     const usage = conflict ? 'conflict' : !known || rpt(known) === 0 ? 'unknown' : 'known';
     if (usage !== 'known') data.issues.add(`${key}: ${usage} usage`);
     const ts = first.ts ?? rows.find((r) => r.ts !== null)?.ts ?? null;
-    const stage = findStage(map, data, first.session, ts);
+    const stage = findStage(map, data, first.session, message, ts);
     const countable = usage === 'known' ? known : null;
     if (message && !standalone)
       finishByMessage.set(message, (finishByMessage.get(message) ?? 0) + 1);
@@ -239,6 +277,10 @@ function ledger(manifest: Entry, data: Inputs) {
   }
   for (const ref of data.retryRefs.values()) data.issues.add(`${ref}: retry billing unknown`);
   for (const [session, rows] of map) {
+    for (const row of rows)
+      for (const message of row.messages ?? [])
+        if (!finishByMessage.has(message) && !data.syntheticTaskMessages.has(message))
+          data.issues.add(`session/${session}: registered message ${message} has no measured step`);
     if (rows.length && !observedSessions.has(session))
       data.issues.add(`session/${session}: registered session has no measured calls`);
   }

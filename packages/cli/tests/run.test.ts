@@ -12,7 +12,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { git, readJson, writeJson } from '../src/harness/io.js';
 import { flagsFor, parsePlan } from '../src/harness/plan.js';
 import { Container } from '../src/harness/runner.js';
@@ -168,7 +168,7 @@ describe('isolated run lifecycle', () => {
         '1.1',
         '1.2',
       ]);
-      expect(new Set(manifest.stages.map(({ session_id }) => session_id)).size).toBe(8);
+      expect(new Set(manifest.stages.map(({ session_id }) => session_id)).size).toBe(7);
       if (mode === 'paired') {
         const base = join(out, 'test-1-base-a1');
         expect(readJson<RunManifest>(join(base, 'manifest.json'))).toMatchObject({
@@ -223,6 +223,170 @@ describe('isolated run lifecycle', () => {
         '1.1',
         '1.2',
       ]);
+    },
+    60000,
+  );
+  it.each([
+    { h01: false, h02: false, mode: 'optimized' },
+    { h01: true, h02: false, mode: 'ablation' },
+    { h01: false, h02: true, mode: 'ablation' },
+    { h01: true, h02: true, mode: 'paired' },
+  ])(
+    'replays session_per_task=$h01 and capsule=$h02 independently ($mode)',
+    async ({ h01, h02, mode }) => {
+      const selected = [...(h02 ? ['capsule'] : []), ...(h01 ? ['session_per_task'] : [])];
+      const { project, out, args } = fixture('{session_per_task: false, capsule: false}', mode);
+      const branch = mode === 'ablation' ? `ablation-${selected.join('-')}` : 'opt';
+      const dir = join(out, `test-1-${branch}-a1`);
+      const base = join(out, 'test-1-base-a1');
+      onTestFinished(() => {
+        for (const arm of [dir, base]) {
+          if (!existsSync(join(arm, 'manifest.json'))) continue;
+          const root = readJson<RunManifest>(join(arm, 'manifest.json')).isolation.root;
+          if (root) rmSync(root, { recursive: true, force: true });
+        }
+        rmSync(project, { recursive: true, force: true });
+      });
+
+      // Equal timestamps are legal. Shared-session task attribution must survive a clock collision.
+      if (h02 && !h01) vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        if (h02 && !h01) vi.setSystemTime(new Date('2026-11-22T00:00:00Z'));
+        expect(await run([...args, ...selected.flatMap((flag) => ['--flag', flag])])).toBe(0);
+      } finally {
+        if (h02 && !h01) vi.useRealTimers();
+      }
+      const manifest = readJson<RunManifest>(join(dir, 'manifest.json'));
+      expect(manifest).toMatchObject({
+        flags: { session_per_task: h01, capsule: h02 },
+        model: 'mock/replay',
+        dry_run: true,
+        status: 'complete',
+        pipeline_complete: true,
+        accepted: false,
+      });
+      const split = h01 || h02;
+      expect(manifest.stages.map(({ stage }) => stage)).toEqual(
+        split
+          ? ['spec', 'apply', 'apply', 'review', 'verify']
+          : ['spec', 'apply', 'review', 'verify'],
+      );
+      expect(readJson(join(dir, 'meter.json'))).toMatchObject({
+        complete: true,
+        call_count: split ? 5 : 4,
+        known_rpt: 16 * (split ? 5 : 4),
+      });
+      if (mode === 'paired') {
+        const baseline = readJson<RunManifest>(join(base, 'manifest.json'));
+        expect(baseline).toMatchObject({
+          flags: { session_per_task: false, capsule: false },
+          pair_id: manifest.pair_id,
+          baseline_hash: manifest.baseline_hash,
+          model: manifest.model,
+          status: 'complete',
+        });
+        expect(baseline.stages.map(({ stage }) => stage)).toEqual([
+          'spec',
+          'apply',
+          'review',
+          'verify',
+        ]);
+        expect(readJson(join(base, 'baseline.json'))).toMatchObject({
+          protocol: 'B0',
+          status: 'completed',
+        });
+        expect(existsSync(join(base, 'opt'))).toBe(false);
+      }
+      const change = 'openspec/changes/example-change';
+      if (!manifest.isolation.root || !manifest.final_commit)
+        throw new Error('Missing final snapshot');
+      const repo = join(manifest.isolation.root, 'repo');
+      const tasks = git(repo, ['show', `${manifest.final_commit}:${change}/tasks.md`]);
+      expect(tasks).toContain('[x] 1.1');
+      expect(tasks).toContain('[x] 1.2');
+      for (const marker of ['replay-marker.txt', 'replay-sidecar.txt']) {
+        expect(git(repo, ['show', `${manifest.final_commit}:${marker}`])).toBe(
+          'synthetic lifecycle fixture',
+        );
+      }
+      expect(existsSync(join(repo, change, 'handoff.md'))).toBe(h01);
+      expect(readJson(join(dir, 'opt/verify.json'))).toEqual({
+        tree: git(repo, ['rev-parse', `${manifest.final_commit}^{tree}`]),
+        passed: true,
+      });
+      if (!split) {
+        expect(manifest.stages.find(({ stage }) => stage === 'apply')?.task).toBeUndefined();
+        expect(existsSync(join(dir, 'opt/inputs/apply-0.txt'))).toBe(true);
+        expect(existsSync(join(dir, 'opt/inputs/apply-1.1.txt'))).toBe(false);
+        return;
+      }
+      const inputs = ['1.1', '1.2'].map((id) =>
+        readFileSync(join(dir, `opt/inputs/apply-${id}.txt`), 'utf8'),
+      );
+      if (h02) {
+        expect(inputs[0]).toContain('The replay fixture SHALL persist `replay-marker.txt`.');
+        expect(inputs[0]).not.toContain('REQ-REPLAY-02');
+        expect(inputs[1]).toContain('The replay fixture SHALL persist `replay-sidecar.txt`.');
+      } else {
+        for (const [i, prompt] of inputs.entries()) {
+          expect(prompt).toContain(`1.${i + 1}`);
+          expect(prompt).toContain(`${change}/`);
+          expect(prompt).not.toContain('## Requirements and scenarios');
+        }
+      }
+      if (h01) {
+        const handoff = git(repo, ['show', `${manifest.final_commit}:${change}/handoff.md`]);
+        const first = handoff
+          .match(/^## TASK-1\.1\s*\n([\s\S]+?)(?=^## TASK-1\.2\s*$)/m)?.[1]
+          .trim();
+        if (!first) throw new Error('Missing handoff for completed task 1.1 before task 1.2');
+        expect(first).toContain('replay-marker.txt');
+        expect(inputs[0]).not.toContain(first);
+        expect(inputs[1]).toContain(first);
+      }
+
+      type Event = { type: string; sessionID: string; part: { id: string; messageID: string } };
+      type Call = {
+        event_key: string;
+        stage: string;
+        task: string;
+        message_id: string;
+        session_id: string;
+      };
+      const apply = manifest.stages.filter(({ stage }) => stage === 'apply');
+      expect(apply.map(({ task }) => task)).toEqual(['1.1', '1.2']);
+      const finishes = apply.map(({ task }) => {
+        const events: Event[] = readFileSync(join(dir, `raw/stages/apply-${task}.stdout`), 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line));
+        const finish = events.filter((event) => event.type === 'step_finish');
+        expect(finish).toHaveLength(1);
+        return finish[0];
+      });
+      expect(finishes.map((event) => event.sessionID)).toEqual(apply.map((row) => row.session_id));
+      expect(new Set(finishes.map((event) => event.sessionID)).size).toBe(h01 ? 2 : 1);
+      expect(new Set(finishes.map((event) => event.part.messageID)).size).toBe(2);
+      expect(new Set(finishes.map((event) => event.part.id)).size).toBe(2);
+      const calls: Call[] = readFileSync(join(dir, 'calls.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      for (const [i, event] of finishes.entries()) {
+        expect(calls.filter((row) => row.event_key === event.part.id)).toEqual([
+          expect.objectContaining({
+            stage: 'apply',
+            task: apply[i].task,
+            message_id: event.part.messageID,
+            session_id: event.sessionID,
+          }),
+        ]);
+        const exported = readJson<{
+          messages: { info: { id: string }; parts: { id: string }[] }[];
+        }>(join(dir, 'raw/exports', `${event.sessionID}.json`));
+        const message = exported.messages.find((row) => row.info.id === event.part.messageID);
+        expect(message?.parts.map((part) => part.id)).toContain(event.part.id);
+      }
     },
     60000,
   );

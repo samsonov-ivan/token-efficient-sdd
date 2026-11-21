@@ -1,7 +1,7 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { buildCapsule } from '../capsule.js';
 import { runOptimizedReview } from '../review.js';
+import { runTaskSessions } from '../task-sessions.js';
 import { checked, writeJson } from './io.js';
 import type { Flag } from './plan.js';
 import { type Invocation, invocationStem, type ReplayResult } from './replay.js';
@@ -15,7 +15,11 @@ const needsFix = 'synthetic marker needs a review fix\n';
 const reviewFlags = ['incremental_review', 'checklist_review', 'targeted_fix'];
 
 export function usesOptimizedReplay(flags: Record<string, Flag>) {
-  return ['capsule', ...reviewFlags].some((flag) => flags[flag] === true);
+  // Keep the same two-task input for all four H-01/H-02 combinations, including both off.
+  return (
+    Object.hasOwn(flags, 'session_per_task') ||
+    ['capsule', ...reviewFlags].some((flag) => flags[flag] === true)
+  );
 }
 
 interface Options {
@@ -55,10 +59,11 @@ export async function executeOptimizedReplay(opts: Options) {
   const [primary] = tasks;
   const primaryPath = join(repo, primary.file);
   const inspect = () => readFileSync(primaryPath, 'utf8');
-  const emit = async (
-    input: Pick<Invocation, 'stage' | 'reviewIter' | 'task'>,
+  const invokeStep = async (
+    input: Pick<Invocation, 'stage' | 'reviewIter' | 'task' | 'attempt'>,
     prompt: string,
     fixture: NonNullable<Invocation['fixture']>,
+    sessionId?: string,
   ) => {
     const stem = invocationStem(input);
     writeFileSync(join(inputs, `${stem}.txt`), prompt, { flag: 'wx' });
@@ -72,15 +77,22 @@ export async function executeOptimizedReplay(opts: Options) {
         opts.model,
         '--title',
         `${basename(runDir)}/${stem}`,
+        ...(sessionId ? ['--session', sessionId] : []),
         '--',
         prompt,
       ],
       fixture,
     });
     await checked(Promise.resolve(result));
-    if (result.replayAnswer !== fixture.answer) throw new Error(`Missing replay reply for ${stem}`);
-    return result.replayAnswer;
+    if (result.replayAnswer !== fixture.answer || !result.replaySessionId)
+      throw new Error(`Missing replay reply or session for ${stem}`);
+    return { answer: result.replayAnswer, sessionId: result.replaySessionId };
   };
+  const emit = async (
+    input: Pick<Invocation, 'stage' | 'reviewIter'>,
+    prompt: string,
+    fixture: NonNullable<Invocation['fixture']>,
+  ) => (await invokeStep(input, prompt, fixture)).answer;
 
   await emit({ stage: 'spec' }, 'Describe the synthetic replay markers.', {
     answer: 'Completed the synthetic spec fixture.',
@@ -110,29 +122,62 @@ export async function executeOptimizedReplay(opts: Options) {
 
   const done = new Set<string>();
   const structuredReview = reviewFlags.some((flag) => flags[flag] === true);
-  const apply = (task: (typeof tasks)[number]) => {
+  const writeMarker = (task: (typeof tasks)[number]) => {
     writeFileSync(
       join(repo, task.file),
       task === primary && structuredReview ? needsFix : expected,
     );
-    done.add(task.id);
-    writeFileSync(tasksPath, taskList(done));
   };
-  if (flags.capsule === true) {
-    for (const task of tasks) {
-      await emit(
-        { stage: 'apply', task: task.id },
-        buildCapsule(repo, feature, task.id, { enabled: true }),
-        {
-          answer: `Completed synthetic task ${task.id}.`,
-          mutate: () => apply(task),
-        },
-      );
-    }
-  } else {
+  function fixtureTask(id: string) {
+    const task = tasks.find((item) => item.id === id);
+    if (!task) throw new Error(`Unknown replay task: ${id}`);
+    return task;
+  }
+  const perTask = await runTaskSessions(
+    {
+      repo,
+      changeId: feature,
+      sessionPerTask: flags.session_per_task === true,
+      capsule: flags.capsule === true,
+      maxRetries: 1,
+    },
+    {
+      async apply({ taskId, prompt, sessionId, attempt }) {
+        const task = fixtureTask(taskId);
+        const result = await invokeStep(
+          { stage: 'apply', task: taskId, attempt },
+          prompt,
+          {
+            answer: [
+              `Task ${taskId}: wrote ${task.file}.`,
+              `Public artifact: ${task.file} (${task.req}).`,
+              `Task gate: check ${task.file} for a nonempty marker (${task.scenario}).`,
+            ].join('\n'),
+            mutate: () => writeMarker(task),
+          },
+          sessionId,
+        );
+        return { sessionId: result.sessionId, handoff: result.answer };
+      },
+      async checkTask(id) {
+        const task = fixtureTask(id);
+        const path = join(repo, task.file);
+        const passed = existsSync(path) && readFileSync(path, 'utf8').trim().length > 0;
+        if (passed) done.add(id);
+        return { passed, summary: `${task.scenario}: expected a nonempty marker in ${task.file}` };
+      },
+    },
+  );
+  if (!perTask) {
     await emit({ stage: 'apply' }, `Implement the tasks in ${change}/.`, {
       answer: 'Completed the synthetic apply fixture.',
-      mutate: () => tasks.forEach(apply),
+      mutate() {
+        for (const task of tasks) {
+          writeMarker(task);
+          done.add(task.id);
+        }
+        writeFileSync(tasksPath, taskList(done));
+      },
     });
   }
 

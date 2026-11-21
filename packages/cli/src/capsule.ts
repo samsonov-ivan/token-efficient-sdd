@@ -25,7 +25,7 @@ interface Requirement extends RequirementName {
 
 // Ignore Markdown inside fenced examples when locating headings and checkboxes.
 // Offsets into the original text keep line endings, indentation and blank lines intact.
-function markdownLines(source: string) {
+export function markdownLines(source: string) {
   const lines: { start: number; text: string; literal: boolean }[] = [];
   let fence = '';
   for (const match of source.matchAll(/[^\r\n]*(?:\r\n|\n|\r|$)/g)) {
