@@ -52,7 +52,7 @@ def source(attempt, name):
     return f"{attempt.path.name}/{name}"
 
 
-def replay(attempt, workspace):
+def replay(attempt, workspace, *, portable_archive=False):
     """Keep stdout from a real CLI invocation; save its derived files outside the archive."""
     output = workspace / attempt.path.name
     command = [
@@ -74,14 +74,13 @@ def replay(attempt, workspace):
         raise ValueError(f"Пересчёт отличается от архива {attempt.path.name}")
     expr = "{run_id, complete, call_count, rpt, cost}"
     stdout = run(["jq", expr], input=raw_stdout).stdout.strip()
-    # Show the portable output argument used for replay, not a machine-specific temporary path.
-    display = (
-        shlex.join(command[:-1])
-        + ' "$TMP/'
-        + attempt.path.name
-        + '" | jq '
-        + shlex.quote(expr)
-    )
+    # Use shell variables in the frame when an argument refers to a temporary directory.
+    prefix = shlex.join(command[:-1])
+    if portable_archive:
+        prefix = (
+            shlex.join(command[:3]) + f' "$RUNS"/{shlex.quote(attempt.path.name)} --out'
+        )
+    display = prefix + ' "$TMP/' + attempt.path.name + '" | jq ' + shlex.quote(expr)
     return display, stdout
 
 
@@ -413,7 +412,7 @@ def prototype_capsule_scene(attempt):
 def prototype_scenes(attempts, label, h03_path, workspace, live_smoke=None):
     base, opt = prototype_pair(attempts, label)
     arms = (base, opt)
-    base_command, base_output = replay(base, workspace)
+    base_command, base_output = replay(base, workspace, portable_archive=True)
     _, opt_output = replay(opt, workspace)
     outcomes = [json.loads(output) for output in (base_output, opt_output)]
     scenes = [
