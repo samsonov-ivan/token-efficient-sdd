@@ -1,0 +1,50 @@
+{
+  "fixture": "public-reference",
+  "endpoint": "loopback",
+  "node": "v24.15.0",
+  "checks": [
+    {
+      "version": "1.19.6",
+      "model": "frugal-fixture/smoke",
+      "producer": "ses_dffcba748ffeBrI77n0ZGmb5K6",
+      "consumer": "ses_dffcb9d5effedMC32DMUmC4I1N",
+      "reference": "h01-f18988b7d474c759d7be447ea9a29bb0",
+      "distinct_sessions": true,
+      "handoff_verified": true,
+      "exports_verified": 2,
+      "gate_retry": true,
+      "task_attempts": {
+        "1.1": 2,
+        "1.2": 1
+      },
+      "provider_requests_sha256": "19a6a17b72695efc1e9a32d371d9949d8fc9e597e7f0afe9af6a9205a1f5b017",
+      "continuation_verified": true,
+      "missing_handoff_session": "ses_dffcb972effedbSvJsHEXQS5qE",
+      "missing_handoff_http_status": 400,
+      "requests": 4
+    },
+    {
+      "version": "2.3.2",
+      "model": "frugal-fixture/smoke",
+      "producer": "ses_dffcb9141ffesx9k7AzunAY4S3",
+      "consumer": "ses_dffcb8d82ffefgxp1VwabWsjHp",
+      "reference": "h01-41da080e31f821589ef8e5108b37ab3d",
+      "distinct_sessions": true,
+      "handoff_verified": true,
+      "exports_verified": 2,
+      "gate_retry": true,
+      "task_attempts": {
+        "1.1": 2,
+        "1.2": 1
+      },
+      "provider_requests_sha256": "ef9296740382b0364b211247584f74daf1d451b160b8bff04f5fe2c3d4cc040e",
+      "continuation_verified": true,
+      "missing_handoff_session": "ses_dffcb8ac8ffeZ5UaPw9cS3sJau",
+      "missing_handoff_http_status": 400,
+      "requests": 4
+    }
+  ],
+  "implementation_commit": "8935cc4cdf9cc60bf0e6491091a132d496a82ebf",
+  "local_archive": "bench/runs/frugal-native-h01-OhYFOt",
+  "eligible_for_token_savings": false
+}

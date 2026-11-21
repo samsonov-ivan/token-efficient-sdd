@@ -28,6 +28,8 @@ node_modules/.bin/vitest run packages/cli/tests/run.test.ts \
 
 Для проверки самого плагина в OpenCode V1 и V2 выполните `npm run setup:v2` и `node scripts/probe-compression.mjs "$demo_dir/compression.json"`. Проверка на локальной фикстуре измеряет длину сжатого журнала и сверяет SHA-256 оригинала, который OpenCode может прочитать после сжатия. [Сохранённая сводка](bench/runs/summary/h03-native-loopback.json) · [команды Docker-репетиции](tools/runner/README.md)
 
+Передачу контекста между задачами можно проверить в установленных OpenCode 1.19.6 и 2.3.2. После `npm ci` и `npm run setup:v2` выполните `npm run check:handoff`. Локальный провайдер выдаёт разовое значение и проверяет, что оно попало во вход второй сессии. Команда печатает реальные ID сессий и каталог событий. [Сводка проверки](bench/runs/summary/h01-native-opencode.json)
+
 Запись показа с отдельными сессиями задач, капсулами, структурированным ревью и проверкой сжатия можно собрать из открытой фикстуры. [Команды записи](docs/VIDEO.md#показ-прототипа-на-открытой-фикстуре)
 
 Разработчикам доступны `npm test` и `npm run test:analysis`. Если у вас есть архив живых попыток, пересчитайте его теми же командами `scripts/replay.mjs` и `frugal report`, передав путь к архиву. [Измеритель и экспорт](docs/METER.md) · [замороженный B0](docs/baseline/B0.md) · [контроли демо-репозитория](bench/features/QA.md)

@@ -11,7 +11,7 @@ ICS = Impact × Confidence × Safety (каждый от 1 до 5; Safety — б�
 
 | ID | Оптимизация | Пакет | Приоритет | I | C | S | ICS | Флаг | Статус | Эксперимент | Результат |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| H-01 | Свежая сессия на задачу + handoff | A | P0 | 5 | 4 | 3 | 60 | `session_per_task` | Backlog | |  |
+| H-01 | Свежая сессия на задачу + handoff | A | P0 | 5 | 4 | 3 | 60 | `session_per_task` | Backlog | E1 после Ф0 | Открытая фикстура проверяет исправление в текущей сессии и передачу принятой записи в новую сессию OpenCode V1/V2. Экономия S5 ожидает измерения. [Сводка](../bench/runs/summary/h01-native-opencode.json) |
 | H-02 | Капсула задачи (spec slicing) | A | P0 | 4 | 3 | 3 | 36 | `capsule` | Backlog | |  |
 | H-03 | Сжатие выводов инструментов (включая read/grep) | B | P0 | 3 | 3 | 4 | 36 | `tool_output_compression` | Backlog | |  |
 | H-04 | Детерминированные гейты до LLM | C | P0 | 3 | 4 | 5 | 60 | `deterministic_gates` | Backlog | |  |
