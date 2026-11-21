@@ -158,3 +158,73 @@ def test_missing_or_duplicate_arm_and_ties(tmp_path):
     assert report.collect(tmp_path)[1]["pair"][0] is None
     assert report.sign_p([0.8, 0.9, 0.9, 1]) == 0.125
     assert report.sign_p([1]) == 1
+
+
+def test_live_baseline_shows_stage_spend_and_independent_quality(tmp_path):
+    root = tmp_path / "runs"
+    arm = make_arm(root, "live-base", "base", 100)
+    manifest_file = arm / "manifest.json"
+    manifest = report.read_json(manifest_file)
+    manifest.update(
+        mode="baseline",
+        pipeline_complete=True,
+        status="failed",
+        accepted=False,
+        gates={
+            "suites": {
+                "public": {"passed": 126, "total": 126},
+                "hidden": {"passed": 29, "total": 30},
+            },
+            "metrics": {"R": 1},
+        },
+    )
+    save(manifest_file, manifest)
+    out = tmp_path / "output"
+    report.write_report(root, out)
+    contents = (out / "REPORT.md").read_text()
+    assert "| Спецификация | 1 | 100 | 100.0% |" in contents
+    assert (
+        "Автоматические гейты · ожидают независимой оценки | 126/126 | 29/30 | 1 |"
+        in contents
+    )
+
+    receipt_folder = root / "summary"
+    receipt_folder.mkdir()
+    save(
+        receipt_folder / "live-base-quality.json",
+        {
+            "run_id": "live-base",
+            "final_commit": "snap",
+            "manifest_sha256": report.sha256(manifest_file),
+            "signed_quality": {"passed": False, "failed_checks": ["semantic"]},
+            "tests": {
+                "public": {"passed": 126, "observed": 126},
+                "hidden": {"passed": 29, "observed": 30},
+            },
+            "review_rounds": 1,
+            "public_contract_defects": ["SCN-LIM-05.3: incorrect pagination"],
+        },
+    )
+    report.write_report(root, out)
+    contents = (out / "REPORT.md").read_text()
+    assert (
+        "Автоматические гейты · до независимой оценки | 126/126 | 29/30 | 1 |"
+        in contents
+    )
+    assert (
+        "Независимая подписанная приёмка · снимок отклонён | 126/126 | 29/30 | 1 |"
+        in contents
+    )
+    assert "SCN-LIM-05.3" in contents
+    assert "../runs/summary/live-base-quality.json" in contents
+    assert (
+        '<a href="../runs/summary/live-base-quality.json">Независимая приёмка · снимок отклонён</a>'
+        in (out / "dashboard.html").read_text()
+    )
+
+    manifest["final_commit"] = "replaced"
+    save(manifest_file, manifest)
+    report.write_report(root, out)
+    contents = (out / "REPORT.md").read_text()
+    assert "сводка независимой приёмки не прошла проверку" in contents
+    assert "SCN-LIM-05.3" not in contents

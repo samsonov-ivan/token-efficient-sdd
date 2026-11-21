@@ -72,6 +72,8 @@ class Attempt:
     tokens: Counter = field(default_factory=Counter)
     model_calls: list = field(default_factory=list)
     metrics: dict = field(default_factory=dict)
+    qa_receipt: dict = field(default_factory=dict)
+    qa_receipt_error: str | None = None
     meter_ok: bool = False
     quality_ok: bool = False
     cost: float | None = None
@@ -109,6 +111,10 @@ class Attempt:
             and self.quality_ok
             and not self.errors
         )
+
+    @property
+    def qa_receipt_path(self):
+        return self.path.parent / "summary" / f"{self.path.name}-quality.json"
 
 
 def inspect_usage(a):
@@ -206,6 +212,27 @@ def inspect_quality(a):
     a.quality_ok = True
 
 
+def inspect_qa_receipt(a):
+    if not a.qa_receipt_path.is_file():
+        return
+    receipt = read_json(a.qa_receipt_path)
+    if (
+        receipt["run_id"] != a.manifest["run_id"]
+        or receipt["final_commit"] != a.manifest.get("final_commit")
+        or receipt["manifest_sha256"] != sha256(a.path / "manifest.json")
+    ):
+        raise ValueError("сводка независимой приёмки расходится с манифестом")
+    if type(receipt["signed_quality"]["passed"]) is not bool:
+        raise ValueError("сводка независимой приёмки не содержит решения")
+    for kind in ("public", "hidden"):
+        totals = receipt["tests"][kind]
+        if not 0 <= totals["passed"] <= totals["observed"]:
+            raise ValueError("некорректные итоги независимой приёмки")
+    if not 0 <= receipt["review_rounds"] <= 5:
+        raise ValueError("некорректное число раундов независимой приёмки")
+    a.qa_receipt = receipt
+
+
 def inspect_run(path):
     a = Attempt(path)
     try:
@@ -218,6 +245,12 @@ def inspect_run(path):
     checks = [inspect_usage]
     if a.live and not a.technical:
         checks.append(inspect_quality)
+        try:
+            inspect_qa_receipt(a)
+        except (OSError, KeyError, ValueError, TypeError):
+            a.qa_receipt_error = (
+                "Открытая сводка независимой приёмки не прошла проверку."
+            )
     for check in checks:
         try:
             check(a)
@@ -387,6 +420,101 @@ def summarize_series(attempts):
     return result
 
 
+def report_baseline(a, out):
+    m = a.manifest
+    qa = a.qa_receipt
+    signed_quality = qa.get("signed_quality", {})
+    stage_calls = Counter(stage for _, stage, _ in a.model_calls)
+    stage_order = {stage: i for i, stage in enumerate(STAGE_NAMES)}
+    stages = sorted(
+        a.stages, key=lambda stage: (stage_order.get(stage, len(stage_order)), stage)
+    )
+    parts = [f"### Живой B0 · {esc_md(a.path.name)}"]
+    if a.meter_ok:
+        parts.extend(
+            [
+                f"RPT **{a.rpt}**, модельных вызовов **{len(a.model_calls)}**.",
+                table(
+                    ["Стадия", "Вызовы", "RPT", "Доля RPT"],
+                    [
+                        [
+                            esc_md(STAGE_NAMES.get(stage, stage)),
+                            stage_calls[stage],
+                            a.stages[stage],
+                            f"{a.stages[stage] / a.rpt:.1%}" if a.rpt else "—",
+                        ]
+                        for stage in stages
+                    ],
+                ),
+            ]
+        )
+    gates = m.get("gates") or {}
+    suites = gates.get("suites", {})
+    metrics = gates.get("metrics", {})
+    quality_rows = []
+    if suites:
+        public, hidden = (suites.get(kind, {}) for kind in ("public", "hidden"))
+        automated_status = (
+            "до независимой оценки" if qa else "ожидают независимой оценки"
+        )
+        if m.get("assessment_sha256"):
+            automated_status = (
+                "приёмка подтверждена" if m["accepted"] else "приёмка отклонена"
+            )
+        quality_rows.append(
+            [
+                "Автоматические гейты · " + automated_status,
+                f"{public.get('passed', '—')}/{public.get('total', '—')}",
+                f"{hidden.get('passed', '—')}/{hidden.get('total', '—')}",
+                metrics.get("R", "—"),
+            ]
+        )
+    if qa:
+        verdict = "снимок принят" if signed_quality["passed"] else "снимок отклонён"
+        quality_rows.append(
+            [
+                "Независимая подписанная приёмка · " + verdict,
+                *[
+                    f"{qa['tests'][kind]['passed']}/{qa['tests'][kind]['observed']}"
+                    for kind in ("public", "hidden")
+                ],
+                qa["review_rounds"],
+            ]
+        )
+    if quality_rows:
+        parts.append(
+            table(
+                ["Оценка", "Публичные тесты", "Закрытые тесты", "Раунды ревью"],
+                quality_rows,
+            )
+        )
+    if qa:
+        checks = ", ".join(
+            esc_md(check) for check in signed_quality.get("failed_checks", [])
+        )
+        if checks:
+            parts.append(f"Гейты, отклонившие итоговый снимок — {checks}.")
+        parts.extend(esc_md(defect) for defect in qa.get("public_contract_defects", []))
+        parts.append(
+            f"[Открытая сводка независимой приёмки]({ref(out, a.qa_receipt_path)})"
+        )
+    if a.qa_receipt_error:
+        parts.append(a.qa_receipt_error)
+    files = (
+        "manifest.json",
+        "meter.json",
+        "stages.csv",
+        "calls.jsonl",
+        "raw/relay.jsonl",
+    )
+    parts.append(
+        " · ".join(
+            f"[{p}]({ref(out, a.path / p)})" for p in files if (a.path / p).is_file()
+        )
+    )
+    return parts
+
+
 def report_parts(attempts, pairs, out):
     valid = [(name, *arms) for name, (arms, _) in pairs.items() if arms]
     parts = [
@@ -453,6 +581,14 @@ def report_parts(attempts, pairs, out):
                 )
             )
     parts.extend(summarize_series(attempts))
+    for a in attempts:
+        if (
+            a.live
+            and not a.technical
+            and a.manifest.get("mode") == "baseline"
+            and a.manifest.get("pipeline_complete") is True
+        ):
+            parts.extend(report_baseline(a, out))
     groups = defaultdict(list)
     for label, base, opt in valid:
         name = esc_md(label)
@@ -540,6 +676,17 @@ def write_dashboard(attempts, pairs, out):
     rows = []
     for a in attempts:
         link = e(ref(out, a.path / "manifest.json"))
+        status = e(" · ".join(a.errors) if a.errors else "проверен")
+        if a.qa_receipt:
+            receipt = e(ref(out, a.qa_receipt_path))
+            verdict = (
+                "снимок принят"
+                if a.qa_receipt["signed_quality"]["passed"]
+                else "снимок отклонён"
+            )
+            status = (
+                f'<a href="{receipt}">Независимая приёмка · {verdict}</a><br>{status}'
+            )
         cells = [
             f'<a href="{link}">{e(a.path.name)}</a>',
             e(kind_of(a)),
@@ -547,7 +694,7 @@ def write_dashboard(attempts, pairs, out):
             e(a.manifest.get("model", "—")),
             str(a.rpt) if a.rpt is not None else "—",
             *[e(value) for value in a.billing_values],
-            e(" · ".join(a.errors) if a.errors else "проверен"),
+            status,
         ]
         rows.append("<tr>" + "".join(f"<td>{v}</td>" for v in cells) + "</tr>")
     cards = []
