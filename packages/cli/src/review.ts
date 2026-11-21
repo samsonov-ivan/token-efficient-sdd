@@ -150,7 +150,7 @@ function applyFindings(raw: string, request: ReviewPacket, previous: Finding[]) 
   const blocked = findings.some((f) => f.status === 'open' && f.severity === 'blocking');
   if ((report.verdict === 'changes_requested') !== blocked)
     throw new Error('Review verdict disagrees with open blocking findings');
-  return { ...report, findings };
+  return { report: { ...report, findings }, updated };
 }
 
 // Git produces one patch per literal path. Match findings against the new
@@ -200,6 +200,7 @@ export async function runOptimizedReview(options: ReviewOptions, driver: ReviewD
     throw new Error('Review evidence must be outside the worktree');
   mkdirSync(archive);
   let findings: Finding[] = [];
+  const findingTrees = new Map<string, string>();
   let previousTree: string | undefined;
   let expectedTree: string | undefined;
   let needsFinal = false;
@@ -271,9 +272,10 @@ export async function runOptimizedReview(options: ReviewOptions, driver: ReviewD
     const raw = await driver.review(request);
     writeFileSync(join(dir, 'review-output.txt'), raw);
     if ((await driver.snapshot()) !== tree) throw new Error('Review modified its snapshot');
-    const report = applyFindings(raw, request, findings);
+    const { report, updated } = applyFindings(raw, request, findings);
     writeJson(join(dir, 'findings.json'), report);
     findings = report.findings;
+    for (const id of updated) findingTrees.set(id, tree);
     const blocked = report.verdict === 'changes_requested';
     rounds.push({
       round: iteration,
@@ -298,7 +300,11 @@ export async function runOptimizedReview(options: ReviewOptions, driver: ReviewD
     expectedTree = tree;
     if (blocked) {
       const open = findings.filter((f) => f.status === 'open');
-      const hunks = targeted ? fixHunks(repo, baseTree, tree, open) : undefined;
+      // Omitted findings keep their prior status, but their lines may have shifted.
+      const hunks =
+        targeted && open.every((f) => findingTrees.get(f.id) === tree)
+          ? fixHunks(repo, baseTree, tree, open)
+          : undefined;
       await driver.fix({
         change_id: changeId,
         iteration,

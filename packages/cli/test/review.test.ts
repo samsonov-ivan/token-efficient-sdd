@@ -235,6 +235,45 @@ it('preserves full fix input when targeted_fix is disabled', async () => {
   expect(driver.fix.mock.calls[0][0].scope).toBe('full');
 });
 
+it.each(['omitted', 'refreshed'] as const)(
+  'selects fix context when an earlier finding location is %s after lines shift',
+  async (location) => {
+    const { options, driver } = fixture();
+    const tail = { ...blocking, line: 27, message: 'Defect in the tail' };
+    const file = join(options.repo, 'api.txt');
+    const prefix = Array.from({ length: 40 }, (_, i) => `prefix ${i}`).join('\n');
+    driver.fix
+      .mockImplementationOnce(async () => {
+        writeFileSync(file, `${prefix}\n${readFileSync(file, 'utf8')}`);
+      })
+      .mockImplementationOnce(async () => {
+        writeFileSync(file, readFileSync(file, 'utf8').replace('unrelated tail', 'corrected tail'));
+      });
+    driver.review.mockImplementation(async (p) => {
+      if (p.iteration === 1) return response(p, [tail], 'changes_requested');
+      if (p.iteration === 2)
+        return response(
+          p,
+          location === 'refreshed' ? [{ ...tail, line: 67 }] : [],
+          'changes_requested',
+        );
+      if (p.iteration === 3) return response(p, [{ ...tail, line: 67, status: 'resolved' }]);
+      return response(p);
+    });
+
+    await runOptimizedReview(options, driver);
+    const fix = driver.fix.mock.calls[1][0];
+    expect(fix.diff).toContain('+unrelated tail');
+    if (location === 'omitted') {
+      expect(fix.scope).toBe('full');
+      expect(fix.diff).toBe(readFileSync(fix.fullPatch, 'utf8'));
+    } else {
+      expect(fix.scope).toBe('hunks');
+      expect(fix.diff).not.toContain('+prefix 39');
+    }
+  },
+);
+
 it('verifies after the final full round at the limit and rejects remaining blockers', async () => {
   const { options, driver } = fixture();
   driver.review.mockImplementation(async (p) => response(p, [blocking], 'changes_requested'));
