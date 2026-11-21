@@ -1,6 +1,7 @@
 import { basename, extname } from 'node:path';
 import { requirementPattern } from './change.js';
 import { resolveIdentities } from './inference.js';
+import { pythonTestContext } from './python.js';
 import { isTestFile, type Snapshot } from './snapshot.js';
 import { inspectSuites } from './suites.js';
 import {
@@ -157,17 +158,9 @@ function checkAssertion(snapshot: Snapshot, l: Link, infer: boolean) {
   const ext = extname(file);
   let testContext = before;
   if (ext === '.py') {
-    const defs = [...before.matchAll(/^(\s*)(?:async\s+)?def\s+([\w]+)\s*\(/gm)];
-    const f = defs.at(-1);
-    const id = l.test.split('::').at(-1)?.split('[')[0];
-    if (!f || f[2] !== id) throw new Error(`Assertion is outside reported test ${l.test}`);
-    const module = l.test.split('::')[0].split('.');
-    if (!module.includes(basename(file, '.py')))
-      throw new Error(`JUnit class does not match test file: ${l.test}`);
-    const start = before.slice(0, f.index).split('\n');
-    let n = start.length - 1;
-    while (n >= 0 && (!start[n].trim() || /^\s*@/.test(start[n]))) n--;
-    testContext = start.slice(n + 1).join('\n') + before.slice(f.index);
+    const context = pythonTestContext(lines, l.assertion.line, l.test, basename(file, '.py'));
+    if (context === undefined) throw new Error(`Assertion is outside reported test ${l.test}`);
+    testContext = context;
   } else if (['.ts', '.tsx', '.js', '.mjs', '.jsx', '.cjs'].includes(ext)) {
     const title = [
       ...before.matchAll(/\b(?:it|test)(?:\.\w+)?\s*\(\s*["'\x60]([^"'\x60]+)["'\x60]/g),
