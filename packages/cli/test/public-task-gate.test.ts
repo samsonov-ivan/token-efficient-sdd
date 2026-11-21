@@ -2,9 +2,11 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -42,10 +44,12 @@ it('rejects missing JUnit on an apparently successful retry and preserves both o
   const root = mkdtempSync(join(realpathSync(tmpdir()), 'frugal-task-gate-'));
   try {
     mkdirSync(join(root, 'tmp'));
+    const repo = join(root, 'repo');
+    mkdirSync(join(repo, '.git'), { recursive: true });
     let trial = 0;
     const gate = createTaskGate(
       root,
-      root,
+      repo,
       join(root, 'evidence'),
       publicTaskConfig(target),
       30,
@@ -62,9 +66,45 @@ it('rejects missing JUnit on an apparently successful retry and preserves both o
     );
     expect(existsSync(join(root, 'evidence/opt'))).toBe(false);
     expect((await gate('1.1', 1)).passed).toBe(true);
-    expect((await gate('1.1', 2)).passed).toBe(false);
+    const retry = await gate('1.1', 2);
+    expect(retry.passed).toBe(false);
+    expect(retry.summary).toContain('public output');
+    const full = retry.summary.split('Full output: ')[1];
+    expect(full).toMatch(/\/\.git\/frugal-public-tests-[a-f0-9-]+\.log$/);
+    expect(readFileSync(full, 'utf8')).toBe('public output');
     expect(readFileSync(join(root, 'evidence/opt/public-tests/1.1-attempt-2.log'), 'utf8')).toBe(
       'public output',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it('refuses to publish through a replaced Git directory and retains the archived output', async () => {
+  const root = mkdtempSync(join(realpathSync(tmpdir()), 'frugal-task-gate-'));
+  try {
+    const repo = join(root, 'repo');
+    const gitDir = join(repo, '.git');
+    const outside = join(root, 'outside');
+    mkdirSync(gitDir, { recursive: true });
+    mkdirSync(join(root, 'tmp'));
+    mkdirSync(outside);
+    const gate = createTaskGate(
+      root,
+      repo,
+      join(root, 'evidence'),
+      publicTaskConfig(target),
+      30,
+      async () => {
+        rmSync(gitDir, { recursive: true });
+        symlinkSync(outside, gitDir);
+        return { code: 1, stdout: 'E AssertionError: expected 3', stderr: '' };
+      },
+    );
+    await expect(gate('1.1', 1)).rejects.toThrow(/Unsafe public task log directory/);
+    expect(readdirSync(outside)).toEqual([]);
+    expect(readFileSync(join(root, 'evidence/opt/public-tests/1.1-attempt-1.log'), 'utf8')).toBe(
+      'E AssertionError: expected 3',
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -80,6 +120,7 @@ it.runIf(process.env.FRUGAL_TEST_IMAGE)(
     try {
       const repo = join(root, 'repo');
       mkdirSync(join(repo, 'tests'), { recursive: true });
+      mkdirSync(join(repo, '.git'));
       writeFileSync(
         join(repo, 'tests/test_fixture.py'),
         [

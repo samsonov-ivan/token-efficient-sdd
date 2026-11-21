@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseReport } from '../quality/suites.js';
 import type { Result } from './io.js';
@@ -107,7 +107,11 @@ export function createTaskGate(
     const result = await execute(args);
     const output = result.stdout + result.stderr;
     writeFileSync(join(evidence, `${stem}.log`), output, { flag: 'wx' });
-    const log = `${temp}.log`;
+    // The isolated process has exited. Only publish in the ordinary clone's
+    // real Git directory, which is readable by OpenCode and excluded from snapshots.
+    const gitDir = join(repo, '.git');
+    if (realpathSync(gitDir) !== gitDir) throw new Error('Unsafe public task log directory');
+    const log = join(gitDir, `frugal-public-tests-${randomUUID()}.log`);
     writeFileSync(log, output, { flag: 'wx', mode: 0o600 });
     let summary: string;
     let passed = false;
@@ -123,6 +127,14 @@ export function createTaskGate(
         .join(', ')}`;
     } catch (error) {
       summary = `Unusable JUnit report: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    if (!passed) {
+      const lines = output.trim().split(/\r?\n/);
+      const detail =
+        lines.find((line) => /^E\s+\S/.test(line)) ??
+        lines.find((line) => /^(?:FAILED|ERROR)\s+\S/.test(line)) ??
+        lines.at(-1);
+      if (detail?.trim()) summary += ` ${detail.trim().slice(0, 300)}`;
     }
     return {
       passed,
