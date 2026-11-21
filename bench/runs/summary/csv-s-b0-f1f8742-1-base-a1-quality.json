@@ -1,0 +1,214 @@
+{
+  "accepted": false,
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "baseline_assets_sha256": "bd5d3e928bde7061ff832c543da6924eb152bd4caf735e32eb21416a79aa64d9",
+  "bundle_sha256": "b8c88375b7a96e260fd005f19ed771ecb2eecd5084505414b8a5791b470b0acf",
+  "elapsed_seconds": 1218.366,
+  "evaluator_image": "sha256:125f814e79a90503d55021aa79cecd2de0402d792bcec22c538441d093315278",
+  "expected_sha256": "bb6514768c03556678b55e2c0ccd2314895dfc0d3bd78ef3dc92a1554b3a6cdd",
+  "experiment": "EXP-20261121-11",
+  "feature": "export-history-csv",
+  "final_commit": "c01805dd835b712c57e71dcd571628abcd68d2d2",
+  "final_tree": "c76280813242d2ebfd0f34fe716a6f6c3111eab3",
+  "frozen_public_replay": {
+    "original_inventory_passed": 68,
+    "original_inventory_total": 68,
+    "passed": 95,
+    "total": 95
+  },
+  "frozen_regression": true,
+  "independent_suite_checks": {
+    "base-hidden": {
+      "error": 0,
+      "failure": 16,
+      "identities_and_outcomes_match": true,
+      "independent_report_sha256": "43d5d857db5ea3a1bd2f427d0f7e8126b71fca29153ffd6b12fd0d85dfacf0e2",
+      "observed": 16,
+      "passed": 0,
+      "report_sha256": "5521ef88a13b198bbfa882028cb22838901186c583aa82bbf41810c560f8e4e3",
+      "skipped": 0
+    },
+    "base-public": {
+      "error": 0,
+      "failure": 0,
+      "identities_and_outcomes_match": true,
+      "independent_report_sha256": "8e8e893ff8243642d61fd1226eab5cf69e33629f937f8ccd9c045b806dd9338b",
+      "observed": 68,
+      "passed": 68,
+      "report_sha256": "05f9b72a6a63f1dd80aa1ad786fe95345fe9f5a6ba08250c7a1e0e668226047b",
+      "skipped": 0
+    },
+    "final-hidden": {
+      "error": 0,
+      "failure": 0,
+      "identities_and_outcomes_match": true,
+      "independent_report_sha256": "785d144cba76add908c38c1361b660530378ee82043c66c60870fef10d50ac19",
+      "observed": 16,
+      "passed": 16,
+      "report_sha256": "fd52915f60b482c02d86bcca5d17bc5cb044ec25d8c91ceb4d6447a3678846c7",
+      "skipped": 0
+    },
+    "final-public": {
+      "error": 0,
+      "failure": 0,
+      "identities_and_outcomes_match": true,
+      "independent_report_sha256": "11002a36372d3d687850178dfc538551366b4a0d4ff436c9e193d261a41eefe6",
+      "observed": 95,
+      "passed": 95,
+      "report_sha256": "09471ee619834f861f78737b754f59889b92985b090245d1d4cd252583eb0166",
+      "skipped": 0
+    },
+    "regression-public": {
+      "error": 0,
+      "failure": 0,
+      "identities_and_outcomes_match": true,
+      "independent_report_sha256": "464112f124d452b195e4586641ff0adbd6a83b31ba3eb4d27e75f1aab9824c1e",
+      "observed": 68,
+      "passed": 68,
+      "report_sha256": "21d45b450d7831ed081b3c0e967f9e02f9fc9bc066d515a2b20ae1c95aba1f62",
+      "skipped": 0
+    }
+  },
+  "manifest_sha256": "5aa579efd9e18e412fda8ab8beae1a5c3357714a6a7425bc78d443d80daee5d7",
+  "meter_replay": {
+    "allowance": 0.06778794,
+    "billing_source_counts": {
+      "go": 90
+    },
+    "by_stage": {
+      "apply": {
+        "model_calls": 36,
+        "rpt": 1631449
+      },
+      "review": {
+        "model_calls": 23,
+        "rpt": 1203539
+      },
+      "spec": {
+        "model_calls": 18,
+        "rpt": 535787
+      },
+      "verify": {
+        "model_calls": 13,
+        "rpt": 443473
+      }
+    },
+    "complete": true,
+    "cost": 0,
+    "http_status_counts": {
+      "200": 90
+    },
+    "list_cost": 0.11297986999999997,
+    "meter_sha256": "1c98615a1e089094d8ba5fc9ec662a84473a10529cc2287324ff493d0c12557e",
+    "model": "opencode-go/deepseek-v4.1-flash",
+    "model_calls": 90,
+    "normalized_ledgers_identical": true,
+    "reasoning_effort_counts": {
+      "max": 90
+    },
+    "relative_discrepancy": 0,
+    "rpt": 3814248
+  },
+  "oracle_sha256": "2fa8e442c678d8c3b0bb8ee8555ebf6b9d93882ea807bfc08dccb376d4a815d3",
+  "pipeline_complete": true,
+  "preserved_scope": {
+    "requirements": 2,
+    "scenarios": 6,
+    "tasks": 5
+  },
+  "public_contract_defects": [
+    "SCN-CSV-02.3. Допустимый перевод от 0001-01-01 присутствует в выгрузке без фильтра. Запрос с включительными границами from=0001-01-01 и to=0001-01-01 отвечает HTTP 200 и возвращает только заголовок CSV. В закреплённом Linux-окружении дата операции записана без ведущих нулей года."
+  ],
+  "public_contract_failure_details": [
+    {
+      "expected_item_count": 1,
+      "observed_item_count": 0,
+      "request_date_range": {
+        "from": "0001-01-01",
+        "to": "0001-01-01"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "status": 200,
+      "stored_timestamp_example": "1-01-01T00:00:00Z"
+    }
+  ],
+  "public_contract_probe_sha256": "c942ee92bddeeef5f44aa7be6a3d2449dabd36d05e4ea98259cabb31fa6bf2ba",
+  "request_file_sha256": "6475baa80889f9d0c9e578208c4790f94e18eb58f93fad80ae083890ffb1ec96",
+  "request_sha256": "cef05b81593a07988067e2aff6a4234117fc7f0a0a96ae83084c2ad6884e9809",
+  "requirements_sha256": "637220046bedb436d9beab08ddfa3e5057a37da198666759a3737f80552abb76",
+  "review_bound_to_final": true,
+  "review_rounds": 1,
+  "run_id": "csv-s-b0-f1f8742-1-base-a1",
+  "runner_commit": "f1f87429352157e0bbfeb061b5ca376af457ccf9",
+  "scope": "single pre-registered S baseline control outside Ф0/E9",
+  "signed_quality": {
+    "artifact_sha256": {
+      "assessment.json": "f73c27be7c450a5273ad237e900bafe0a84936d48b8a1a16c24afeb520cea810",
+      "assessment.sig": "ea04d5fa0449ce692b214afc08ea37c1d05ff47aea405e64ec38c820fc722db5",
+      "public-probe.json": "c942ee92bddeeef5f44aa7be6a3d2449dabd36d05e4ea98259cabb31fa6bf2ba",
+      "public_probe.py": "2d915eaf768330c135f1c839453f40586faed74cd5c1730f7ad2ef8eaeeaa0bb",
+      "reviewer.pem": "8862ac54d55a4edca619e2b45d8fc07cf20e3f5668c5e9d068cda3fbd693b88e",
+      "verdict/gates.json": "da999b00bdff0bf5e44b6c3d72b11191e3e43dded4448f51cd70a90cc6d117e9",
+      "verdict/trace.json": "ac4257fa7cee8850d2dfb1283a0e10dee4378f29b966033967a72ffc926bd49a"
+    },
+    "checks_passed": [
+      "validate",
+      "consistency",
+      "trace",
+      "full_suite",
+      "review",
+      "hidden"
+    ],
+    "failed_checks": [
+      "semantic"
+    ],
+    "files": {
+      "assessment.json": "csv-s-b0-f1f8742-1-base-a1-assessment.json",
+      "assessment.sig": "csv-s-b0-f1f8742-1-base-a1-assessment.sig",
+      "reviewer.pem": "csv-s-b0-f1f8742-1-base-a1-reviewer.pem"
+    },
+    "inferred_task_requirement_links": 5,
+    "metrics": {
+      "Cons": 0,
+      "Cov_expected": 0.5,
+      "Cov_req": 1,
+      "Cov_scn": 1,
+      "Cov_task": 1,
+      "Green": 1,
+      "Q_hidden": 1,
+      "R": 1
+    },
+    "passed": false,
+    "signature": "Ed25519",
+    "verified_trace_links": 11
+  },
+  "status": "failed",
+  "tests": {
+    "hidden": {
+      "error": 0,
+      "failed": 0,
+      "failure": 0,
+      "identities_and_outcomes_match": true,
+      "independent_report_sha256": "785d144cba76add908c38c1361b660530378ee82043c66c60870fef10d50ac19",
+      "missing": 0,
+      "observed": 16,
+      "passed": 16,
+      "report_sha256": "fd52915f60b482c02d86bcca5d17bc5cb044ec25d8c91ceb4d6447a3678846c7",
+      "required": 16,
+      "skipped": 0
+    },
+    "public": {
+      "error": 0,
+      "failed": 0,
+      "failure": 0,
+      "identities_and_outcomes_match": true,
+      "independent_report_sha256": "11002a36372d3d687850178dfc538551366b4a0d4ff436c9e193d261a41eefe6",
+      "missing": 0,
+      "observed": 95,
+      "passed": 95,
+      "report_sha256": "09471ee619834f861f78737b754f59889b92985b090245d1d4cd252583eb0166",
+      "required": 68,
+      "skipped": 0
+    }
+  }
+}

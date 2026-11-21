@@ -473,6 +473,8 @@ def report_baseline(a, out):
     qa = a.qa_receipt
     signed_quality = qa.get("signed_quality", {})
     parts = [f"### Живой B0 · {esc_md(a.path.name)}"]
+    if m.get("feature_id"):
+        parts.append(f"Фича — {esc_md(m['feature_id'])}.")
     if m.get("pipeline_complete") is False:
         parts.append(
             "Конвейер остановился до итоговой приёмки. Метрики качества отсутствуют."
@@ -741,6 +743,8 @@ def dashboard_link(out, path, label):
 def dashboard_baseline(a, out):
     manifest = a.manifest
     heading = f"<h3>{esc_html(a.path.name)}</h3>"
+    if manifest.get("feature_id"):
+        heading += f"<p>Фича — {esc_html(manifest['feature_id'])}.</p>"
     sources = [(a.path / "manifest.json", "Манифест")]
     if manifest.get("pipeline_complete") is False:
         quality = (

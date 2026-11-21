@@ -275,7 +275,11 @@ def test_stopped_baseline_reports_spend_without_quality(tmp_path):
     arm = make_arm(root, "stopped", "base", 100)
     manifest = report.read_json(arm / "manifest.json")
     manifest.update(
-        mode="baseline", status="failed", pipeline_complete=False, final_commit=None
+        mode="baseline",
+        status="failed",
+        pipeline_complete=False,
+        final_commit=None,
+        feature_id="export-history-csv",
     )
     save(arm / "manifest.json", manifest)
     summary = root / "summary"
@@ -285,6 +289,7 @@ def test_stopped_baseline_reports_spend_without_quality(tmp_path):
     report.write_report(root, out)
     contents = (out / "REPORT.md").read_text()
     assert "Живой B0 · stopped" in contents
+    assert "Фича — export-history-csv." in contents
     assert "RPT **100**, модельных вызовов **1**" in contents
     assert (
         "Конвейер остановился до итоговой приёмки. Метрики качества отсутствуют."
@@ -294,6 +299,7 @@ def test_stopped_baseline_reports_spend_without_quality(tmp_path):
     assert "привязка QA" not in contents
     dashboard = (out / "dashboard.html").read_text()
     assert "<h3>stopped</h3>" in dashboard
+    assert "<p>Фича — export-history-csv.</p>" in dashboard
     assert "<strong>100 RPT</strong>" in dashboard
     assert "Конвейер остановился до итоговой приёмки." in dashboard
     assert 'href="../runs/summary/stopped-process-diagnostic.json"' in dashboard

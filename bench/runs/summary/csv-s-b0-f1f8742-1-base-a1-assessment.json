@@ -1,0 +1,243 @@
+{
+  "version": 1,
+  "reviewer": "Frugal independent post-pipeline QA",
+  "run_id": "csv-s-b0-f1f8742-1-base-a1",
+  "manifest_sha256": "5aa579efd9e18e412fda8ab8beae1a5c3357714a6a7425bc78d443d80daee5d7",
+  "public_contract_probe_sha256": "c942ee92bddeeef5f44aa7be6a3d2449dabd36d05e4ea98259cabb31fa6bf2ba",
+  "request_sha256": "cef05b81593a07988067e2aff6a4234117fc7f0a0a96ae83084c2ad6884e9809",
+  "final_commit": "c01805dd835b712c57e71dcd571628abcd68d2d2",
+  "final_tree": "c76280813242d2ebfd0f34fe716a6f6c3111eab3",
+  "semantic": [
+    {
+      "requirement": "REQ-CSV-01",
+      "verdict": "pass",
+      "reason": "The immutable snapshot returns text/csv UTF-8 with a literal header and RFC 4180 CRLF, no BOM, correct quoting of literal identifiers and integer fields, UTC Z-suffixed stored timestamps, header-only empty history and the exact 404 JSON structure. The independent HTTP probe verified these functions and read-only behavior. The short stored year contradicts the design’s canonical-format assumption, and its confirmed filtering consequence is recorded under REQ-CSV-02."
+    },
+    {
+      "requirement": "REQ-CSV-02",
+      "verdict": "fail",
+      "reason": "SCN-CSV-02.3 fails on a valid UTC date: a transfer created through the public API using the injected UTC clock at 0001-01-01 is present unfiltered, but from=0001-01-01&to=0001-01-01 returns only the header (HTTP 200). On the pinned Linux evaluator src/minibank/models.py:44 stores 1-01-01T00:00:00Z. src/minibank/history_export.py:37–38 constructs zero-padded bounds and src/minibank/repository.py:105–110 compares the strings. This also falsifies the assumption in design.md:42. Ordinary UTC bounds, upper date 9999-12-31, direction, stable ordering, and error envelopes pass independently."
+    }
+  ],
+  "links": [
+    {
+      "scenario": "SCN-CSV-01.1",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_serialization_writes_exact_header_and_crlf_records",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 208,
+        "text": "assert payload == ("
+      },
+      "code": {
+        "path": "src/minibank/history_export.py",
+        "line": 57,
+        "text": "writer = csv.writer(buffer, lineterminator=\"\\r\\n\")"
+      }
+    },
+    {
+      "scenario": "SCN-CSV-01.2",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_http_export_unknown_account_returns_json_error",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 288,
+        "text": "assert response.json() == {\"error\": {\"code\": \"account_not_found\"}}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 54,
+        "text": "repository.account_record(connection, account_id)"
+      }
+    },
+    {
+      "scenario": "SCN-CSV-01.2",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_end_to_end_export_boundaries_ownership_and_read_only",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 394,
+        "text": "assert empty.content == b\"id,created_at,source,destination,amount,type\\r\\n\""
+      },
+      "code": {
+        "path": "src/minibank/history_export.py",
+        "line": 58,
+        "text": "writer.writerow(HEADER)"
+      }
+    },
+    {
+      "scenario": "SCN-CSV-01.3",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_serialization_escapes_identifiers_for_rfc_4180",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 246,
+        "text": "assert payload == ("
+      },
+      "code": {
+        "path": "src/minibank/history_export.py",
+        "line": 60,
+        "text": "writer.writerow("
+      }
+    },
+    {
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.1",
+      "test": "tests.test_history_export::test_self_transfer_is_emitted_once_as_outgoing",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 59,
+        "text": "assert len(rows) == 1"
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 103,
+        "text": "conditions.append(\"(source = ? OR destination = ?)\")"
+      }
+    },
+    {
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_end_to_end_export_boundaries_ownership_and_read_only",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 399,
+        "text": "assert bob.content == ("
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 113,
+        "text": "ORDER BY id ASC\"\"\","
+      }
+    },
+    {
+      "scenario": "SCN-CSV-02.2",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_direction_filter_selects_matching_rows",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 73,
+        "text": "assert exported_ids(ledger, \"alice\", parse_query(direction=\"incoming\")) == ["
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 97,
+        "text": "conditions.append(\"(destination = ? AND source <> ?)\")"
+      }
+    },
+    {
+      "scenario": "SCN-CSV-02.2",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_http_invalid_query_precedes_unknown_account",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 322,
+        "text": "assert response.json() == {\"error\": {\"code\": \"invalid_export_query\"}}"
+      },
+      "code": {
+        "path": "src/minibank/history_export.py",
+        "line": 28,
+        "text": "raise DomainError(422, \"invalid_export_query\")"
+      }
+    },
+    {
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_date_filters_are_inclusive_and_independent",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 109,
+        "text": "assert exported_ids(ledger, \"alice\", parse_query(date_to=\"2026-11-21\")) == ["
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 109,
+        "text": "conditions.append(\"created_at <= ?\")"
+      }
+    },
+    {
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_http_export_applies_direction_and_date_filters",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 345,
+        "text": "assert response.content == ("
+      },
+      "code": {
+        "path": "src/minibank/api.py",
+        "line": 64,
+        "text": "query = parse_query(direction, date_from, date_to)"
+      }
+    },
+    {
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_end_to_end_export_boundaries_ownership_and_read_only",
+      "assertion": {
+        "path": "tests/test_history_export.py",
+        "line": 399,
+        "text": "assert bob.content == ("
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 106,
+        "text": "conditions.append(\"created_at >= ?\")"
+      }
+    }
+  ],
+  "artifact_links": [
+    {
+      "path": "openspec/changes/export-history-csv/tasks.md",
+      "line": 5,
+      "text": "- [x] 1.1 Implement the read-only selection of transfers involving the selected account exactly once in ascending ID order, plus direction classification (`outgoing` on source match, `incoming` otherwise). Add tests for related-only selection, exclusion of unrelated transfers, ordering, and the single `outgoing` emission of a self-transfer, marked `@pytest.mark.task(\"1.1\")` and `@pytest.mark.req(\"SCN-CSV-02.1\")`. Verify with `uv run --locked python -m pytest -q tests/test_history_export.py`.",
+      "task": "1.1",
+      "refs": [
+        "REQ-CSV-02"
+      ],
+      "reason": "Explicit SCN-CSV-02.1 and related-only selection, order, and deduplication connect the checkbox to REQ-CSV-02."
+    },
+    {
+      "path": "openspec/changes/export-history-csv/tasks.md",
+      "line": 7,
+      "text": "- [x] 1.2 Implement strict parsing and application of optional `type=incoming|outgoing`, `from` and `to` filters: exact lowercase direction values, real `YYYY-MM-DD` dates, inclusive UTC bounds, independent combination, and rejection of a reversed period. Add tests for each direction, date boundaries, combined filters and invalid filter inputs, marked `@pytest.mark.task(\"1.2\")` with `@pytest.mark.req(\"SCN-CSV-02.2\")` and `@pytest.mark.req(\"SCN-CSV-02.3\")`. Verify with `uv run --locked python -m pytest -q tests/test_history_export.py`.",
+      "task": "1.2",
+      "refs": [
+        "REQ-CSV-02"
+      ],
+      "reason": "Explicit SCN-CSV-02.2 and SCN-CSV-02.3, with descriptions of direction and inclusive date behavior, connect the checkbox to REQ-CSV-02."
+    },
+    {
+      "path": "openspec/changes/export-history-csv/tasks.md",
+      "line": 9,
+      "text": "- [x] 1.3 Implement CSV serialization with the exact header, CRLF terminators, UTF-8 without BOM, decimal IDs, UTC `Z` timestamps, literal source/destination, integer amounts and emitted direction; use RFC 4180 minimal quoting for identifiers containing commas or quotes. Add tests asserting exact bytes and escaping for identifiers such as `shop,1` and quoted IDs, marked `@pytest.mark.task(\"1.3\")`, `@pytest.mark.req(\"SCN-CSV-01.1\")` and `@pytest.mark.req(\"SCN-CSV-01.3\")`. Verify with `uv run --locked python -m pytest -q tests/test_history_export.py`.",
+      "task": "1.3",
+      "refs": [
+        "REQ-CSV-01"
+      ],
+      "reason": "Explicit SCN-CSV-01.1 and SCN-CSV-01.3 and the CSV encoding, header, and field obligations connect the checkbox to REQ-CSV-01."
+    },
+    {
+      "path": "openspec/changes/export-history-csv/tasks.md",
+      "line": 11,
+      "text": "- [x] 1.4 Add `GET /accounts/{id}/history.csv` returning `text/csv` success responses and the existing JSON error envelope for all failures: unknown account 404 `account_not_found`, and unknown direction, invalid date or reversed period 422 `invalid_export_query`. Add HTTP tests for status, media type and error bodies, marked `@pytest.mark.task(\"1.4\")` with `@pytest.mark.req(\"SCN-CSV-01.2\")`, `@pytest.mark.req(\"SCN-CSV-02.2\")` and `@pytest.mark.req(\"SCN-CSV-02.3\")`. Verify with `uv run --locked python -m pytest -q tests/test_history_export.py`.",
+      "task": "1.4",
+      "refs": [
+        "REQ-CSV-01",
+        "REQ-CSV-02"
+      ],
+      "reason": "Explicit SCN-CSV-01.2, SCN-CSV-02.2, and SCN-CSV-02.3 and their HTTP success and error behavior connect the checkbox to both requirements."
+    },
+    {
+      "path": "openspec/changes/export-history-csv/tasks.md",
+      "line": 13,
+      "text": "- [x] 1.5 Add an end-to-end integration test covering empty history with only the CRLF-terminated header, inclusive `from`/`to` boundaries, operation ownership across several accounts, and unchanged SQLite contents after export. Mark it `@pytest.mark.task(\"1.5\")` with the applicable `SCN-CSV-01.2`, `SCN-CSV-02.1` and `SCN-CSV-02.3` requirement marks, then run the full suite and change validation with `uv run --locked python -m pytest -q` and `openspec validate export-history-csv --strict`.",
+      "task": "1.5",
+      "refs": [
+        "REQ-CSV-01",
+        "REQ-CSV-02"
+      ],
+      "reason": "Explicit SCN-CSV-01.2, SCN-CSV-02.1, and SCN-CSV-02.3 with header, boundaries, and ownership checks connect the checkbox to both requirements."
+    }
+  ]
+}
