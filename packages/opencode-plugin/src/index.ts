@@ -1,20 +1,20 @@
-import { appendFileSync } from "node:fs";
+import { appendFileSync } from 'node:fs';
 
 // An opt-in marker lets the host prove the correct entry point ran, even offline.
-function recordLoad(entry: "server" | "setup"): void {
+function recordLoad(entry: 'server' | 'setup'): void {
   const target = process.env.FRUGAL_PLUGIN_LOAD_LOG;
   if (target) {
-    appendFileSync(target, JSON.stringify({ plugin: "frugal", entry }) + "\n", { mode: 0o600 });
+    appendFileSync(target, JSON.stringify({ plugin: 'frugal', entry }) + '\n', { mode: 0o600 });
   }
 }
 
 export default {
-  id: "frugal",
+  id: 'frugal',
   async server() {
-    recordLoad("server");
+    recordLoad('server');
     return {};
   },
   setup() {
-    recordLoad("setup");
+    recordLoad('setup');
   },
 };
