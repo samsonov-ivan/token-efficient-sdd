@@ -1,0 +1,61 @@
+
+ RUN  v3.2.7 /private/work/example
+
+ ✓ contract.test.js > successful case with stable integer 0 0ms
+ ✓ contract.test.js > successful case with stable integer 1 0ms
+ ✓ contract.test.js > successful case with stable integer 2 0ms
+ ✓ contract.test.js > successful case with stable integer 3 0ms
+ ✓ contract.test.js > successful case with stable integer 4 0ms
+ ✓ contract.test.js > successful case with stable integer 5 0ms
+ ✓ contract.test.js > successful case with stable integer 6 0ms
+ ✓ contract.test.js > successful case with stable integer 7 0ms
+ ✓ contract.test.js > successful case with stable integer 8 0ms
+ ✓ contract.test.js > successful case with stable integer 9 0ms
+ ✓ contract.test.js > successful case with stable integer 10 0ms
+ ✓ contract.test.js > successful case with stable integer 11 0ms
+ × contract.test.js > first mismatch 2ms
+   → expected 'alpha' to be 'beta' // Object.is equality
+ × contract.test.js > second mismatch 1ms
+   → expected 2 to be 3 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  contract.test.js > first mismatch
+AssertionError: expected 'alpha' to be 'beta' // Object.is equality
+
+Expected: "beta"
+Received: "alpha"
+
+ ❯ contract.test.js:14:46
+     12| test('successful case with stable integer 10', () => expect(10).toBe(1…
+     13| test('successful case with stable integer 11', () => expect(11).toBe(1…
+     14| test('first mismatch', () => expect('alpha').toBe('beta'));
+       |                                              ^
+     15| test('second mismatch', () => expect(2).toBe(3));
+     16|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  contract.test.js > second mismatch
+AssertionError: expected 2 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 2
+
+ ❯ contract.test.js:15:41
+     13| test('successful case with stable integer 11', () => expect(11).toBe(1…
+     14| test('first mismatch', () => expect('alpha').toBe('beta'));
+     15| test('second mismatch', () => expect(2).toBe(3));
+       |                                         ^
+     16|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 12 passed (14)
+   Start at  23:00:59
+   Duration  138ms (transform 7ms, setup 0ms, collect 5ms, tests 4ms, environment 0ms, prepare 26ms)
