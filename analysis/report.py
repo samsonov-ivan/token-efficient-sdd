@@ -23,7 +23,8 @@ CONTROLS = (
     "requirements_hash",
     "test_oracle_hash",
     "baseline_hash",
-    "common_config_hash",
+    "config_hash",
+    "expected_hash",
     "profile",
 )
 QUALITY = ("Cov_req", "Cov_scn", "Cov_task", "Cov_expected", "Green", "Cons")
@@ -136,6 +137,11 @@ def inspect_usage(a):
     stages = {k: v["rpt"] for k, v in summary["by_stage"].items() if v["call_count"]}
     if stages != dict(a.stages):
         raise ValueError("итоги стадий расходятся с meter.json")
+    crosscheck = a.path / "reconciliation.json"
+    if crosscheck.exists():
+        evidence = read_json(crosscheck)
+        if evidence.get("matched") is False or evidence.get("fields_match") is False:
+            raise ValueError("первичный источник расходится с нормализованной разбивкой")
     a.meter_ok = True
     a.cost = summary.get("cost")
 
@@ -197,6 +203,9 @@ def compare_arms(arms):
             key
         ):
             return None, "различается или отсутствует контроль: " + key
+    images = [a.manifest.get("isolation", {}).get("image") for a in (base, opt)]
+    if not images[0] or images[0] != images[1]:
+        return None, "различаются образы стенда"
     if any(base.manifest["flags"].values()):
         return None, "в baseline включена оптимизация"
     if not base.rpt:

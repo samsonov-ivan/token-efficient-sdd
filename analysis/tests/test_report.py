@@ -30,6 +30,7 @@ def make_arm(root, name, branch, total, dry=False):
         pair_id="pair",
         accepted=True,
         series_id="series",
+        isolation={"image": "fixture-image"},
         dry_run=dry,
         status="complete",
         final_commit="snap",
