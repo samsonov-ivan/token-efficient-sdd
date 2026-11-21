@@ -23,32 +23,42 @@ function reference(text) {
 
 // V2 session export represents completion as a third, idle record. The CLI
 // step_finish message ID links the assistant turn to storage on both hosts.
-function verifyExport(record, turn, deliveredText) {
-  assert.equal(record.info.id, turn.sessionId);
+function verifyExport(record, turns) {
   const messages = record.messages.filter((m) => m.type !== 'idle');
   assert.deepEqual(
     messages.map((m) => m.info?.role ?? m.type),
-    ['user', 'assistant'],
+    turns.flatMap(() => ['user', 'assistant']),
   );
-  const [user, assistant] = messages;
   const joinText = (parts) =>
     parts
       .filter((p) => p.type === 'text')
       .map((p) => p.text)
       .join('\n');
-  assert.equal(user.text ?? joinText(user.parts), deliveredText);
-  assert.equal(joinText(assistant.parts ?? assistant.content), turn.answer);
-  assert.equal(assistant.info?.providerID ?? assistant.model.providerID, 'frugal-fixture');
-  assert.equal(assistant.info?.modelID ?? assistant.model.id, 'smoke');
-  const events = turn.stdout
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line));
-  assert.ok(!events.some((e) => e.type === 'tool_use'), 'Fixture tasks must complete without tools');
-  const finishes = events.filter((e) => e.type === 'step_finish');
-  assert.equal(finishes.length, 1);
-  assert.equal(finishes[0].part.reason, 'stop');
-  assert.equal(finishes[0].part.messageID, assistant.info?.id ?? assistant.id);
+  const messageIds = new Set();
+  for (const [index, turn] of turns.entries()) {
+    assert.equal(record.info.id, turn.sessionId);
+    const [user, assistant] = messages.slice(2 * index, 2 * index + 2);
+    assert.equal(user.text ?? joinText(user.parts), turn.packet.latestUserText);
+    assert.equal(joinText(assistant.parts ?? assistant.content), turn.answer);
+    assert.equal(assistant.info?.providerID ?? assistant.model.providerID, 'frugal-fixture');
+    assert.equal(assistant.info?.modelID ?? assistant.model.id, 'smoke');
+    const events = turn.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    assert.ok(
+      !events.some((e) => e.type === 'tool_use'),
+      'Fixture tasks must complete without tools',
+    );
+    const finishes = events.filter((e) => e.type === 'step_finish');
+    assert.equal(finishes.length, 1);
+    const finish = finishes[0];
+    assert.equal(finish.sessionID, turn.sessionId);
+    assert.equal(finish.part.reason, 'stop');
+    assert.equal(finish.part.messageID, assistant.info?.id ?? assistant.id);
+    assert.ok(finish.part.messageID && !messageIds.has(finish.part.messageID));
+    messageIds.add(finish.part.messageID);
+  }
 }
 
 async function probe(version, root) {
@@ -73,90 +83,116 @@ async function probe(version, root) {
     );
     await writeFile(join(change, 'tasks.md'), tasks);
     const turns = [];
-    const options = {
-      repo: host.repo,
-      changeId,
-      sessionPerTask: true,
-      capsule: false,
-      maxRetries: 0,
-    };
-    await runTaskSessions(options, {
-      async apply({ taskId, sessionId, prompt }) {
-        const result = await host.invoke(prompt, sessionId, `H01 task ${taskId}`);
-        turns.push(result);
-        await writeFile(join(dir, `input-${taskId}.txt`), prompt);
-        await writeFile(join(dir, `events-${taskId}.jsonl`), result.stdout);
-        return { sessionId: result.sessionId, handoff: result.answer };
+    const retrySummary = 'PUBLIC-H01-HISTORY-CONTROL Confirm the value issued in the prior turn.';
+    const handoffFile = join(change, 'handoff.md');
+    await runTaskSessions(
+      {
+        repo: host.repo,
+        changeId,
+        sessionPerTask: true,
+        capsule: false,
+        maxRetries: 1,
       },
-      async checkTask(taskId) {
-        const turn = turns.at(-1);
-        const packet = provider.requests.at(-1);
-        assert.equal(
-          provider.requests.length,
-          turns.length,
-          'Unexpected background request or retry',
-        );
-        assert.equal(packet.kind, taskId === '1.1' ? 'producer' : 'consumer');
-        assert.equal(packet.status, 200);
-        assert.equal(packet.model, 'smoke');
-        assert.equal(packet.responseContent, turn.answer);
-        assert.equal(packet.roles.filter((role) => role === 'user').length, 1);
-        assert.ok(
-          !packet.roles.includes('assistant'),
-          'New session received a previous assistant turn',
-        );
-        assert.ok(
-          packet.latestUserText.includes(await readFile(join(dir, `input-${taskId}.txt`), 'utf8')),
-        );
-        const ref = reference(turn.answer);
-        if (taskId === '1.1') assert.ok(!packet.latestUserText.includes(ref));
-        else {
-          const accepted = await readFile(join(change, 'handoff.md'), 'utf8');
-          assert.equal(accepted, `## TASK-1.1\n\n${turns[0].answer}\n`);
-          assert.ok(
-            packet.latestUserText.includes(accepted.trimEnd()),
-            'Handoff did not reach the model',
-          );
-          assert.equal(ref, reference(turns[0].answer));
-        }
-        return { passed: true, summary: 'Provider request and native assistant response matched.' };
+      {
+        async apply({ taskId, attempt, sessionId, prompt }) {
+          const stem = attempt === 1 ? taskId : `${taskId}-attempt-${attempt}`;
+          await writeFile(join(dir, `input-${stem}.txt`), prompt);
+          if (attempt === 2) {
+            assert.equal(sessionId, turns[0].sessionId);
+            assert.equal(await readFile(join(change, 'tasks.md'), 'utf8'), tasks);
+            await assert.rejects(readFile(handoffFile), { code: 'ENOENT' });
+            assert.ok(prompt.includes(retrySummary));
+            assert.ok(!prompt.includes(reference(turns[0].answer)));
+          } else {
+            assert.equal(sessionId, undefined);
+          }
+          const result = await host.invoke(prompt, sessionId, `H01 task ${taskId}`);
+          await writeFile(join(dir, `events-${stem}.jsonl`), result.stdout);
+          turns.push({ ...result, taskId, attempt, prompt, packet: provider.requests.at(-1) });
+          return { sessionId: result.sessionId, handoff: result.answer };
+        },
+        async checkTask(taskId) {
+          const turn = turns.at(-1);
+          const { attempt, packet } = turn;
+          assert.equal(provider.requests.length, turns.length, 'Unexpected provider request');
+          assert.equal(turn.taskId, taskId);
+          assert.equal(packet.status, 200);
+          assert.equal(packet.model, 'smoke');
+          assert.equal(packet.responseContent, turn.answer);
+          assert.ok(packet.latestUserText.includes(turn.prompt));
+          assert.equal(packet.roles.filter((role) => role === 'user').length, attempt);
+          assert.deepEqual(packet.assistantContents, attempt === 2 ? [turns[0].answer] : []);
+          if (attempt === 1) assert.ok(!packet.roles.includes('assistant'));
+          if (taskId === '1.1' && attempt === 1) {
+            assert.equal(packet.kind, 'producer');
+            assert.match(turn.answer, /^Published /);
+            assert.ok(!packet.latestUserText.includes(reference(turn.answer)));
+            return { passed: false, summary: retrySummary };
+          }
+          assert.equal(reference(turn.answer), reference(turns[0].answer));
+          if (taskId === '1.1') {
+            assert.equal(packet.kind, 'history');
+            assert.match(turn.answer, /^Received /);
+            assert.ok(!packet.latestUserText.includes(reference(turn.answer)));
+          } else {
+            assert.equal(packet.kind, 'consumer');
+            const note = await readFile(handoffFile, 'utf8');
+            assert.equal(note, `## TASK-1.1\n\n${turns[1].answer}\n`);
+            assert.equal(
+              await readFile(join(change, 'tasks.md'), 'utf8'),
+              tasks.replace('[ ]', '[x]'),
+            );
+            assert.ok(packet.latestUserText.includes(note.trimEnd()));
+            assert.ok(!packet.latestUserText.includes(turns[0].answer.split('\n')[0]));
+          }
+          return { passed: true, summary: 'Native handoff and provider request matched.' };
+        },
       },
-    });
-    assert.equal(turns.length, 2);
-    const [producer, consumer] = turns;
+    );
+    assert.deepEqual(
+      turns.map((t) => [t.taskId, t.attempt]),
+      [
+        ['1.1', 1],
+        ['1.1', 2],
+        ['1.2', 1],
+      ],
+    );
+    const [producer, retry, consumer] = turns;
+    assert.equal(retry.sessionId, producer.sessionId);
     assert.notEqual(producer.sessionId, consumer.sessionId);
     assert.equal(await readFile(join(change, 'tasks.md'), 'utf8'), tasks.replaceAll('[ ]', '[x]'));
-    for (const [index, turn] of turns.entries()) {
-      const exported = await host.exportSession(turn.sessionId);
-      const taskId = `1.${index + 1}`;
-      await save(join(dir, `export-${taskId}.json`), exported);
-      verifyExport(exported, turn, provider.requests[index].latestUserText);
+    assert.equal(
+      await readFile(handoffFile, 'utf8'),
+      `## TASK-1.1\n\n${retry.answer}\n\n## TASK-1.2\n\n${consumer.answer}\n`,
+    );
+    const sessions = [[producer, retry], [consumer]];
+    for (const group of sessions) {
+      const exported = await host.exportSession(group[0].sessionId);
+      await save(join(dir, `export-${group[0].taskId}.json`), exported);
+      verifyExport(exported, group);
     }
 
-    const continued = await host.invoke(
-      'PUBLIC-H01-HISTORY-CONTROL Confirm the reference from our earlier exchange.',
-      producer.sessionId,
-      'H01 history control',
+    const withoutNote = consumer.prompt.replace(
+      `## TASK-1.1\n\n${retry.answer}\n`,
+      'No handoff has been recorded.',
     );
-    assert.equal(continued.sessionId, producer.sessionId);
-    assert.equal(reference(continued.answer), reference(producer.answer));
-    const history = provider.requests.at(-1);
-    assert.equal(history.kind, 'history');
-    assert.equal(history.status, 200);
-    assert.ok(history.assistantContents.includes(producer.answer));
-    assert.ok(!history.latestUserText.includes(reference(producer.answer)));
-    await writeFile(join(dir, 'events-history.jsonl'), continued.stdout);
-
-    const secondPrompt = await readFile(join(dir, 'input-1.2.txt'), 'utf8');
-    const withoutNote = secondPrompt.replace(producer.answer, '');
     assert.ok(!withoutNote.includes(reference(producer.answer)));
-    let errorEvents;
-    await assert.rejects(host.invoke(withoutNote, undefined, 'H01 missing handoff'), (error) => {
-      errorEvents = error.stdout;
-      return typeof errorEvents === 'string' && errorEvents.trim().length > 0;
-    });
     await writeFile(join(dir, 'input-missing.txt'), withoutNote);
-    await writeFile(join(dir, 'events-missing.jsonl'), errorEvents);
+    let failure;
+    await assert.rejects(host.invoke(withoutNote, undefined, 'H01 missing handoff'), (error) => {
+      failure = error;
+      return typeof error.stdout === 'string' && error.stdout.trim().length > 0;
+    });
+    await writeFile(join(dir, 'events-missing.jsonl'), failure.stdout);
+    await writeFile(join(dir, 'events-missing.stderr'), failure.stderr ?? '');
+    const errors = failure.stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.type === 'error');
+    assert.equal(errors.length, 1);
+    const negativeSession = errors[0].sessionID;
+    assert.ok(negativeSession && !turns.some((turn) => turn.sessionId === negativeSession));
     const rejected = provider.requests.at(-1);
     assert.equal(rejected.kind, 'consumer');
     assert.equal(
@@ -167,7 +203,12 @@ async function probe(version, root) {
     assert.match(rejected.responseContent, /reference in the latest user message/);
     assert.ok(rejected.latestUserText.includes(withoutNote));
     assert.ok(!rejected.roles.includes('assistant'));
-    assert.equal(provider.requests.length, 4, 'Expected two task requests and two controls');
+    assert.equal(rejected.roles.filter((role) => role === 'user').length, 1);
+    assert.equal(
+      provider.requests.length,
+      4,
+      'Expected three task attempts and a fresh negative control',
+    );
     return {
       version,
       model: 'frugal-fixture/smoke',
@@ -176,11 +217,14 @@ async function probe(version, root) {
       reference: reference(producer.answer),
       distinct_sessions: true,
       handoff_verified: true,
-      exports_verified: turns.length,
+      exports_verified: sessions.length,
+      gate_retry: true,
+      task_attempts: Object.fromEntries(sessions.map((group) => [group[0].taskId, group.length])),
       provider_requests_sha256: createHash('sha256')
         .update(JSON.stringify(provider.requests, null, 2) + '\n')
         .digest('hex'),
       continuation_verified: true,
+      missing_handoff_session: negativeSession,
       missing_handoff_http_status: rejected.status,
       requests: provider.requests.length,
     };
@@ -200,7 +244,7 @@ for (const version of ['1.19.6', '2.3.2']) {
     `OpenCode ${version} · ${check.producer} → ${check.consumer} · передан ${check.reference}`,
   );
   console.log(
-    `PASS · новая сессия получила handoff; продолженная сессия получила историю; без handoff локальный провайдер вернул HTTP ${check.missing_handoff_http_status}.`,
+    `PASS · гейт отклонил первую попытку; повтор получил историю; новая сессия получила принятый handoff; без него провайдер вернул HTTP ${check.missing_handoff_http_status}.`,
   );
 }
 await save(join(root, 'summary.json'), {
