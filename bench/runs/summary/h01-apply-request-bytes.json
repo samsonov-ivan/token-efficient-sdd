@@ -1,0 +1,267 @@
+{
+  "version": 1,
+  "host": "opencode-ai@1.19.6",
+  "node": "v24.15.0",
+  "transport": "loopback chat/completions",
+  "capture_directory": "friend-h01-wire-20261122-final",
+  "scripts_sha256": {
+    "probe-live-opt.mjs": "b30db3ffad5b0fc72c90803a03d6d9a1ce13ed5ac1b22c0f140202b600654e21",
+    "fixtures/apply-context.mjs": "4165b18cf15ad2a9a6cedb79675b8bbe4e3515551c621cc8b4638ca01555420b"
+  },
+  "unit": "serialized UTF-8 bytes; HTTP headers and responses excluded",
+  "control": "Identical task prompts including accepted handoff, tool calls, assistant replies, tests, paths and resulting trees. Only task 1.2 uses --session in continued.",
+  "arms": {
+    "fresh": {
+      "by_task": {
+        "1.1": {
+          "requests": 2,
+          "body_bytes": 29361,
+          "messages_bytes": 19655,
+          "tools_bytes": 9444,
+          "other_body_bytes": 262
+        },
+        "1.2": {
+          "requests": 2,
+          "body_bytes": 29541,
+          "messages_bytes": 19835,
+          "tools_bytes": 9444,
+          "other_body_bytes": 262
+        }
+      },
+      "apply_total": {
+        "requests": 4,
+        "body_bytes": 58902,
+        "messages_bytes": 39490,
+        "tools_bytes": 18888,
+        "other_body_bytes": 524
+      },
+      "turns": [
+        {
+          "session": "ses_dff80c5bbffeTnM4IrjzrEoW6Y",
+          "answer_sha256": "372605e903035a5a489b94e4a6f58e59e0656e754898efb4de3483189e648763",
+          "prompt_sha256": "def00221a3b4b1ce959b05b74c499589f8a9d79d91f20e2dfd7fa9c0052957cc"
+        },
+        {
+          "session": "ses_dff80beffffeO54XVgpShAa1Ih",
+          "answer_sha256": "4a9b6847174f1dacbba04b9e54d49dd5cec340b71211733ab73920b1b5c7e29c",
+          "prompt_sha256": "ebbd8b9ced548a937230bc518d15d95605fdefa4ef3e10467ea31b971d0712af"
+        }
+      ],
+      "post_apply_trees": [
+        "5ed8136d9fa7ce9155d98fd8025d73bf717aba0b",
+        "3cda19cbd44a45b8e57c8039b62cc3164f489f6c"
+      ]
+    },
+    "continued": {
+      "by_task": {
+        "1.1": {
+          "requests": 2,
+          "body_bytes": 29361,
+          "messages_bytes": 19655,
+          "tools_bytes": 9444,
+          "other_body_bytes": 262
+        },
+        "1.2": {
+          "requests": 2,
+          "body_bytes": 31585,
+          "messages_bytes": 21879,
+          "tools_bytes": 9444,
+          "other_body_bytes": 262
+        }
+      },
+      "apply_total": {
+        "requests": 4,
+        "body_bytes": 60946,
+        "messages_bytes": 41534,
+        "tools_bytes": 18888,
+        "other_body_bytes": 524
+      },
+      "turns": [
+        {
+          "session": "ses_dff80ba10ffesysbDRJOk2YxgU",
+          "answer_sha256": "372605e903035a5a489b94e4a6f58e59e0656e754898efb4de3483189e648763",
+          "prompt_sha256": "def00221a3b4b1ce959b05b74c499589f8a9d79d91f20e2dfd7fa9c0052957cc"
+        },
+        {
+          "session": "ses_dff80ba10ffesysbDRJOk2YxgU",
+          "answer_sha256": "4a9b6847174f1dacbba04b9e54d49dd5cec340b71211733ab73920b1b5c7e29c",
+          "prompt_sha256": "ebbd8b9ced548a937230bc518d15d95605fdefa4ef3e10467ea31b971d0712af"
+        }
+      ],
+      "post_apply_trees": [
+        "5ed8136d9fa7ce9155d98fd8025d73bf717aba0b",
+        "3cda19cbd44a45b8e57c8039b62cc3164f489f6c"
+      ]
+    }
+  },
+  "continued_minus_fresh": {
+    "body_bytes": 2044,
+    "messages_bytes": 2044,
+    "tools_bytes": 0,
+    "other_body_bytes": 0
+  },
+  "requests": [
+    {
+      "arm": "fresh",
+      "task": "1.1",
+      "step": 1,
+      "path": "fresh/apply-1.1-1.json",
+      "sha256": "8bfe6b9ff8832b646167b1f23318a88a80c27179f48a3975a68e041599386214",
+      "body_bytes": 14481,
+      "messages_bytes": 9628,
+      "tools_bytes": 4722,
+      "other_body_bytes": 131,
+      "roles": [
+        "system",
+        "user"
+      ],
+      "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487"
+    },
+    {
+      "arm": "fresh",
+      "task": "1.1",
+      "step": 2,
+      "path": "fresh/apply-1.1-2.json",
+      "sha256": "82ba8d29c10c16bbaa73db27129ba4c316505dd47b54e814dbdfa83f56229a39",
+      "body_bytes": 14880,
+      "messages_bytes": 10027,
+      "tools_bytes": 4722,
+      "other_body_bytes": 131,
+      "roles": [
+        "system",
+        "user",
+        "assistant",
+        "tool"
+      ],
+      "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487"
+    },
+    {
+      "arm": "fresh",
+      "task": "1.2",
+      "step": 1,
+      "path": "fresh/apply-1.2-1.json",
+      "sha256": "00fd24f023ee3e334d1858166ad258e7255ec96e9053d14ae4886f24c3e25564",
+      "body_bytes": 14572,
+      "messages_bytes": 9719,
+      "tools_bytes": 4722,
+      "other_body_bytes": 131,
+      "roles": [
+        "system",
+        "user"
+      ],
+      "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487"
+    },
+    {
+      "arm": "fresh",
+      "task": "1.2",
+      "step": 2,
+      "path": "fresh/apply-1.2-2.json",
+      "sha256": "baabe748b5bf7ae4fd075fbb940fc47e789f3d18260d77e6f15140f340501c78",
+      "body_bytes": 14969,
+      "messages_bytes": 10116,
+      "tools_bytes": 4722,
+      "other_body_bytes": 131,
+      "roles": [
+        "system",
+        "user",
+        "assistant",
+        "tool"
+      ],
+      "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487"
+    },
+    {
+      "arm": "continued",
+      "task": "1.1",
+      "step": 1,
+      "path": "continued/apply-1.1-1.json",
+      "sha256": "8bfe6b9ff8832b646167b1f23318a88a80c27179f48a3975a68e041599386214",
+      "body_bytes": 14481,
+      "messages_bytes": 9628,
+      "tools_bytes": 4722,
+      "other_body_bytes": 131,
+      "roles": [
+        "system",
+        "user"
+      ],
+      "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487"
+    },
+    {
+      "arm": "continued",
+      "task": "1.1",
+      "step": 2,
+      "path": "continued/apply-1.1-2.json",
+      "sha256": "82ba8d29c10c16bbaa73db27129ba4c316505dd47b54e814dbdfa83f56229a39",
+      "body_bytes": 14880,
+      "messages_bytes": 10027,
+      "tools_bytes": 4722,
+      "other_body_bytes": 131,
+      "roles": [
+        "system",
+        "user",
+        "assistant",
+        "tool"
+      ],
+      "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487"
+    },
+    {
+      "arm": "continued",
+      "task": "1.2",
+      "step": 1,
+      "path": "continued/apply-1.2-1.json",
+      "sha256": "a8cf3714ec05a0e1e16cbc1aeb9d25dac4c6eab49af8d58da68eb7575533d08b",
+      "body_bytes": 15594,
+      "messages_bytes": 10741,
+      "tools_bytes": 4722,
+      "other_body_bytes": 131,
+      "roles": [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "user"
+      ],
+      "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487"
+    },
+    {
+      "arm": "continued",
+      "task": "1.2",
+      "step": 2,
+      "path": "continued/apply-1.2-2.json",
+      "sha256": "299d7ada0080c6a6de5d2320a939638bfebb0e9e4f8c35a3fbbb7fb3ed719e50",
+      "body_bytes": 15991,
+      "messages_bytes": 11138,
+      "tools_bytes": 4722,
+      "other_body_bytes": 131,
+      "roles": [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "user",
+        "assistant",
+        "tool"
+      ],
+      "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487"
+    }
+  ],
+  "transcripts": [
+    {
+      "path": "fresh/apply-1.1.jsonl",
+      "sha256": "967121f0bb01b1f11a22558240b6c4041e4a38d1b60c0db0af1546dd83426ae4"
+    },
+    {
+      "path": "fresh/apply-1.2.jsonl",
+      "sha256": "16ab6ca84056891a31268615161f706f87954ac426b181900203dd7ff100ed21"
+    },
+    {
+      "path": "continued/apply-1.1.jsonl",
+      "sha256": "1bea036811a52834576487af4a52599f14ab657d44736f64194e4ca7fbcf243d"
+    },
+    {
+      "path": "continued/apply-1.2.jsonl",
+      "sha256": "7c4c62583ebc89cf5f57777ea31d1234ccd666d33eee002b49d0d013543b641b"
+    }
+  ]
+}
