@@ -409,6 +409,33 @@ def prototype_capsule_scene(attempt):
     )
 
 
+def prototype_handoff_scene(attempt):
+    if attempt.manifest["flags"].get("session_per_task") is not True:
+        return None
+    sessions = [
+        (stage["task"], stage["session_id"])
+        for stage in attempt.manifest["stages"]
+        if stage["stage"] == "apply"
+    ]
+    if [task for task, _ in sessions] != ["1.1", "1.2"] or len(
+        {session for _, session in sessions}
+    ) != 2:
+        raise ValueError("Показ требует отдельную сессию для каждой из двух задач")
+    filename = "opt/inputs/apply-1.2.txt"
+    prompt = (attempt.path / filename).read_text(encoding="utf-8")
+    _, title, handoff = prompt.partition("\n## TASK-1.1\n\n")
+    excerpt = handoff.split("\n\n", 1)[0].splitlines()
+    if not title or len(excerpt) != 3 or "Task 1.1:" not in excerpt[0]:
+        raise ValueError("Во второй сессии отсутствует handoff первой задачи")
+    return Scene(
+        "Отдельные сессии для задач",
+        "После проверки первой задачи оркестратор сохранил handoff и передал его во вторую сессию.",
+        [f"{task}   {session}" for task, session in sessions] + [""] + excerpt,
+        source(attempt, filename),
+        12,
+    )
+
+
 def prototype_scenes(attempts, label, h03_path, workspace, live_smoke=None):
     base, opt = prototype_pair(attempts, label)
     arms = (base, opt)
@@ -469,12 +496,13 @@ def prototype_scenes(attempts, label, h03_path, workspace, live_smoke=None):
             base_command,
         ),
     ]
-    capsule = prototype_capsule_scene(opt)
-    if capsule:
-        scenes.append(capsule)
-    review = prototype_review_scene(opt, workspace)
-    if review:
-        scenes.append(review)
+    for scene in (
+        prototype_capsule_scene(opt),
+        prototype_handoff_scene(opt),
+        prototype_review_scene(opt, workspace),
+    ):
+        if scene:
+            scenes.append(scene)
     scenes.extend(compression_scenes(h03_path))
     if live_smoke:
         scenes.append(archived_smoke_scene(live_smoke, workspace))

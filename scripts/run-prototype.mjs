@@ -15,7 +15,7 @@ const project = mkdtempSync(join(tmpdir(), 'frugal-prototype-'));
 const source = join(project, 'source');
 const feature = join(project, 'bench/features/example-change');
 const repos = join(project, 'bench/repos');
-const flags = ['capsule', 'checklist_review', 'incremental_review', 'targeted_fix'];
+const flags = ['session_per_task', 'capsule', 'checklist_review', 'incremental_review', 'targeted_fix'];
 const gitIdentity = {
   ...process.env,
   GIT_AUTHOR_NAME: 'Frugal Prototype',
