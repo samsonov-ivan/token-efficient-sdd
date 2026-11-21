@@ -4,28 +4,35 @@
 
 ## Запуск прототипа
 
-Из корня checkout используйте Node из `.node-version`, Python ≥3.11, uv, Git и sqlite3. Следующие команды устанавливают инструменты локально, собирают CLI и запускают две изолированные репетиции.
+Из корня checkout используйте Node из `.node-version`, Python ≥3.11, uv, Git и sqlite3. Парная репетиция запускается без ключей и внешней модели. Новый каталог сохраняет исходные события, отчёт и дашборд.
 
 ```bash
 npm ci
-npm run setup:v2
 npm run build
-npm test
-uv run --locked --project analysis pytest analysis/tests
-node_modules/.bin/frugal run --mode paired --feature add-transfer-limits --dry-run --series first-replay
-node scripts/replay.mjs bench/runs
-node_modules/.bin/frugal report bench/runs --out report
+demo_dir=$(mktemp -d)
+node_modules/.bin/frugal run --mode paired --feature add-transfer-limits \
+  --dry-run --series prototype --out "$demo_dir/runs"
+node scripts/replay.mjs "$demo_dir/runs"
+node_modules/.bin/frugal report "$demo_dir/runs" --out "$demo_dir/report"
+ls "$demo_dir/report"
 ```
 
-Для повтора той же серии добавьте `--resume`. На macOS с Docker Desktop или Linux с Docker соберите образ и передайте `--image frugal-runner:local`. Docker-репетиция проверяет изоляцию файлов и запускает закреплённые версии инструментов внутри контейнера. [Команды харнесса](tools/runner/README.md) · [измеритель](docs/METER.md) · [контур качества](docs/QUALITY.md)
+Откройте `REPORT.md` и `dashboard.html` в `$demo_dir/report`. Парная репетиция проверяет изоляцию, создание артефактов и воспроизводимость учёта. Измеренная экономия на живой паре пока не установлена. [Контур качества](docs/QUALITY.md) · [состояние живых прогонов](docs/STATE.md)
 
-Открывайте [отчёт](report/REPORT.md) и [локальный дашборд](report/dashboard.html) после пересчёта. Для проверки расходов доступны [проверка на локальной модели](docs/probes/WP00.md), [контрольный процесс B0](docs/baseline/B0.md) и [контроли демо-репозитория](bench/features/QA.md). Текущий гейт, бюджет и проверенные запуски собраны в [состоянии проекта](docs/STATE.md).
+Открытая фикстура с включёнными оптимизациями проверяет выдачу капсул, инкрементальное ревью после правки и полную проверку итогового состояния. Её можно вызвать отдельно.
+
+```bash
+node_modules/.bin/vitest run packages/cli/tests/run.test.ts \
+  -t 'executes the capsule and review flags'
+```
+
+Для проверки самого плагина в OpenCode V1 и V2 выполните `npm run setup:v2` и `node scripts/probe-compression.mjs "$demo_dir/compression.json"`. Проверка на локальной фикстуре измеряет длину сжатого журнала и сверяет SHA-256 оригинала, который OpenCode может прочитать после сжатия. [Сохранённая сводка](bench/runs/summary/h03-native-loopback.json) · [команды Docker-репетиции](tools/runner/README.md)
+
+Разработчикам доступны `npm test` и `npm run test:analysis`. Если у вас есть архив живых попыток, пересчитайте его теми же командами `scripts/replay.mjs` и `frugal report`, передав путь к архиву. [Измеритель и экспорт](docs/METER.md) · [замороженный B0](docs/baseline/B0.md) · [контроли демо-репозитория](bench/features/QA.md)
 
 ## Как запустить разработку
 
 Открой этот репозиторий в Codex и отправь **«делай»**. [Правила агента](AGENTS.md) направят его к [стартовому промпту](docs/START_PROMPT.md) и [единой стратегии на 27 часов](STRATEGY.md). Для внешнего автоматического запуска передай содержимое стартового промпта как задание с рабочим каталогом в корне репозитория.
-
-**Состояние при объединении планов, 21 ноября 2026 г.** В GitHub и в локальной папке были подготовлены исследования, инженерные предложения, ТЗ и реестры. Рабочего CLI, плагина opencode, демонстрационного стенда и измеренных A/B-пар в этих материалах ещё нет. Проценты в ТЗ задают цели. Первую реализацию открывает пакет WP-00. Результаты последующих запусков фиксируются в [журнале экспериментов](docs/EXPERIMENTS.md).
 
 ## С чего начинается эксперимент
 
