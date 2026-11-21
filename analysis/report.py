@@ -97,6 +97,16 @@ class Attempt:
         )
 
     @property
+    def archived_baseline(self):
+        m = self.manifest
+        return (
+            self.live
+            and not self.technical
+            and m.get("mode") == "baseline"
+            and m.get("status") in {"complete", "failed", "interrupted"}
+        )
+
+    @property
     def billing_values(self):
         return [
             value if value is not None else "—"
@@ -116,6 +126,12 @@ class Attempt:
     @property
     def qa_receipt_path(self):
         return self.path.parent / "summary" / f"{self.path.name}-quality.json"
+
+    @property
+    def process_diagnostic_path(self):
+        return (
+            self.path.parent / "summary" / f"{self.path.name}-process-diagnostic.json"
+        )
 
 
 def inspect_usage(a):
@@ -437,26 +453,31 @@ def elapsed_seconds(interval):
     return duration if duration >= 0 else None
 
 
-def report_baseline(a, out):
-    m = a.manifest
-    qa = a.qa_receipt
-    signed_quality = qa.get("signed_quality", {})
+def baseline_stage_usage(a):
     stage_calls = Counter(stage for _, stage, _ in a.model_calls)
     durations = defaultdict(list)
-    for interval in m.get("stages", []):
+    for interval in a.manifest.get("stages", []):
         durations[interval["stage"]].append(elapsed_seconds(interval))
     stage_order = {stage: i for i, stage in enumerate(STAGE_NAMES)}
     stages = sorted(
         a.stages, key=lambda stage: (stage_order.get(stage, len(stage_order)), stage)
     )
+    for stage in stages:
+        times = durations[stage]
+        seconds = f"{sum(times):.1f}" if times and None not in times else "—"
+        yield stage, stage_calls[stage], a.stages[stage], seconds
+
+
+def report_baseline(a, out):
+    m = a.manifest
+    qa = a.qa_receipt
+    signed_quality = qa.get("signed_quality", {})
     parts = [f"### Живой B0 · {esc_md(a.path.name)}"]
     if m.get("pipeline_complete") is False:
         parts.append(
             "Конвейер остановился до итоговой приёмки. Метрики качества отсутствуют."
         )
-        diagnostic = a.qa_receipt_path.with_name(
-            f"{a.path.name}-process-diagnostic.json"
-        )
+        diagnostic = a.process_diagnostic_path
         if diagnostic.is_file():
             parts.append(f"[Диагностика остановки конвейера]({ref(out, diagnostic)})")
     elapsed = elapsed_seconds(m)
@@ -471,14 +492,12 @@ def report_baseline(a, out):
                     [
                         [
                             esc_md(STAGE_NAMES.get(stage, stage)),
-                            stage_calls[stage],
-                            a.stages[stage],
-                            f"{a.stages[stage] / a.rpt:.1%}" if a.rpt else "—",
-                            f"{sum(durations[stage]):.1f}"
-                            if durations[stage] and None not in durations[stage]
-                            else "—",
+                            calls,
+                            rpt,
+                            f"{rpt / a.rpt:.1%}" if a.rpt else "—",
+                            seconds,
                         ]
-                        for stage in stages
+                        for stage, calls, rpt, seconds in baseline_stage_usage(a)
                     ],
                 ),
             ]
@@ -629,16 +648,7 @@ def report_parts(attempts, pairs, out):
             )
     parts.extend(summarize_series(attempts))
     for a in attempts:
-        if (
-            a.live
-            and not a.technical
-            and a.manifest.get("mode") == "baseline"
-            and a.manifest.get("status") != "running"
-            and (
-                a.manifest.get("pipeline_complete") is True
-                or a.manifest.get("status") in {"failed", "interrupted"}
-            )
-        ):
+        if a.archived_baseline:
             parts.extend(report_baseline(a, out))
     groups = defaultdict(list)
     for label, base, opt in valid:
@@ -720,14 +730,93 @@ def write_report(root, out):
     write_dashboard(attempts, pairs, out)
 
 
+def esc_html(value):
+    return html.escape(str(value), quote=True)
+
+
+def dashboard_link(out, path, label):
+    return f'<a href="{esc_html(ref(out, path))}">{esc_html(label)}</a>'
+
+
+def dashboard_baseline(a, out):
+    manifest = a.manifest
+    heading = f"<h3>{esc_html(a.path.name)}</h3>"
+    sources = [(a.path / "manifest.json", "Манифест")]
+    if manifest.get("pipeline_complete") is False:
+        quality = (
+            "Конвейер остановился до итоговой приёмки. Метрики качества отсутствуют."
+        )
+        sources.append((a.process_diagnostic_path, "Диагностика остановки"))
+    elif a.qa_receipt:
+        qa = a.qa_receipt
+        verdict = (
+            "снимок принят" if qa["signed_quality"]["passed"] else "снимок отклонён"
+        )
+        public, hidden = (qa["tests"][kind] for kind in ("public", "hidden"))
+        quality = (
+            f"Независимая приёмка · {verdict}. "
+            f"Публичные тесты {public['passed']}/{public['observed']}, "
+            f"закрытые тесты {hidden['passed']}/{hidden['observed']}, "
+            f"раунды ревью {qa['review_rounds']}."
+        )
+        sources.append((a.qa_receipt_path, "Открытая сводка приёмки"))
+    elif a.qa_receipt_error:
+        quality = a.qa_receipt_error
+    elif a.quality_ok:
+        quality = "Приёмка подтверждена гейтами."
+    else:
+        quality = "Итоговая приёмка не подтверждена."
+
+    spend = "<p>Полный расход не подтверждён.</p>"
+    if a.meter_ok:
+        sources.extend(
+            (a.path / name, label)
+            for name, label in (
+                ("meter.json", "Учёт расхода"),
+                ("stages.csv", "Сводка по стадиям"),
+                ("calls.jsonl", "Нормализованные вызовы"),
+            )
+        )
+        elapsed = elapsed_seconds(manifest)
+        elapsed_label = f" · {elapsed:.1f} с" if elapsed is not None else ""
+        rows = []
+        for stage, calls, rpt, seconds in baseline_stage_usage(a):
+            share = f"{rpt / a.rpt:.1%}" if a.rpt else "—"
+            label = esc_html(STAGE_NAMES.get(stage, stage))
+            rows.append(
+                f'<tr><th scope="row">{label}</th><td>{calls}</td><td>{rpt}</td>'
+                f'<td><meter max="{max(a.rpt, 1)}" value="{rpt}" aria-hidden="true"></meter> '
+                f"{share}</td><td>{seconds}</td></tr>"
+            )
+        spend = (
+            f"<p><strong>{a.rpt} RPT</strong> · Вызовы модели {len(a.model_calls)}{elapsed_label}</p>"
+            '<div class="table-scroll"><table aria-label="Расход по стадиям"><thead><tr>'
+            '<th scope="col">Стадия</th><th scope="col">Вызовы</th><th scope="col">RPT</th>'
+            '<th scope="col">Доля RPT прогона</th><th scope="col">Время, с</th>'
+            f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
+        )
+    links = " · ".join(
+        dashboard_link(out, path, label) for path, label in sources if path.is_file()
+    )
+    return (
+        f'<article class="baseline-run">{heading}<p>{esc_html(quality)}</p>'
+        f"{spend}<p>{links}</p></article>"
+    )
+
+
 def write_dashboard(attempts, pairs, out):
-    def e(value):
-        return html.escape(str(value), quote=True)
+    e = esc_html
 
     rows = []
     for a in attempts:
         link = e(ref(out, a.path / "manifest.json"))
-        status = e(" · ".join(a.errors) if a.errors else "проверен")
+        status = "проверен"
+        if a.manifest.get("status") == "running":
+            status = "выполняется"
+        elif a.archived_baseline and a.manifest.get("pipeline_complete") is False:
+            status = "конвейер остановлен"
+        elif a.errors:
+            status = "проверка не пройдена" if a.meter_ok else "учёт не подтверждён"
         if a.qa_receipt:
             receipt = e(ref(out, a.qa_receipt_path))
             verdict = (
@@ -762,13 +851,27 @@ def write_dashboard(attempts, pairs, out):
                     f'<meter max="{peak}" value="{b.stages[stage]}"></meter> <meter max="{peak}" value="{o.stages[stage]}"></meter></p>'
                 )
     headline = "Сопоставимые пары" if cards else "Экономия пока не установлена"
+    baselines = "".join(
+        dashboard_baseline(a, out) for a in attempts if a.archived_baseline
+    )
+    baseline_section = (
+        '<section aria-labelledby="baseline-title"><h2 id="baseline-title">Архив замеров B0</h2>'
+        "<p>Расход базового конвейера. Экономию показывает сравнение сопоставимых пар.</p>"
+        f"{baselines}</section>"
+        if baselines
+        else ""
+    )
     page = f"""<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Frugal SDD · результаты</title><style>
 body{{max-width:1100px;margin:4rem auto;padding:0 1.5rem;font:16px/1.5 system-ui;color:#17312a;background:#f9fbf8}}
 h1,h2{{line-height:1.2}} a{{color:#126347}} table{{border-collapse:collapse;width:100%}}
 th,td{{text-align:left;padding:.6rem;border-bottom:1px solid #b9cbbf;vertical-align:top;overflow-wrap:anywhere}}
-section{{overflow:auto}} meter{{width:40%;max-width:22rem}}</style><main><h1>Frugal SDD</h1>
+section,.table-scroll{{overflow:auto}} meter{{width:40%;max-width:22rem}}
+.baseline-run{{padding:1rem 1.25rem;margin:1rem 0;border:1px solid #b9cbbf;border-radius:.5rem}}
+.baseline-run h3{{margin-top:0;overflow-wrap:anywhere}} .baseline-run p:last-child{{margin-bottom:0}}
+.baseline-run meter{{width:6rem;vertical-align:middle}}</style><main><h1>Frugal SDD</h1>
 <h2>{headline}</h2>{"".join(cards)}<p><a href="REPORT.md">Отчёт с расчётами и источниками</a></p>
+{baseline_section}
 <h2>Все попытки</h2><section><table><thead><tr>{"".join(f"<th>{h}</th>" for h in ATTEMPT_COLUMNS)}
 </tr></thead><tbody>{"".join(rows)}</tbody></table></section></main></html>"""
     (out / "dashboard.html").write_text(page, encoding="utf-8")

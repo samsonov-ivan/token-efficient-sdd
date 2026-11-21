@@ -246,6 +246,18 @@ def test_live_baseline_shows_stage_spend_and_independent_quality(tmp_path):
         '<a href="../runs/summary/live-base-quality.json">Независимая приёмка · снимок отклонён</a>'
         in (out / "dashboard.html").read_text()
     )
+    dashboard = (out / "dashboard.html").read_text()
+    assert "Архив замеров B0" in dashboard
+    assert "Экономия пока не установлена" in dashboard
+    assert "<strong>100 RPT</strong> · Вызовы модели 1 · 11.0 с" in dashboard
+    assert (
+        '<meter max="100" value="100" aria-hidden="true"></meter> 100.0%' in dashboard
+    )
+    assert "Публичные тесты 126/126, закрытые тесты 29/30, раунды ревью 1." in dashboard
+    assert 'href="../runs/live-base/meter.json"' in dashboard
+    assert 'href="../runs/live-base/calls.jsonl"' in dashboard
+    assert "raw/" not in dashboard
+    assert "SCN-LIM-05.3" not in dashboard
 
     manifest["final_commit"] = "replaced"
     save(manifest_file, manifest)
@@ -253,6 +265,9 @@ def test_live_baseline_shows_stage_spend_and_independent_quality(tmp_path):
     contents = (out / "REPORT.md").read_text()
     assert "сводка независимой приёмки не прошла проверку" in contents
     assert "SCN-LIM-05.3" not in contents
+    dashboard = (out / "dashboard.html").read_text()
+    assert "сводка независимой приёмки не прошла проверку" in dashboard
+    assert "live-base-quality.json" not in dashboard
 
 
 def test_stopped_baseline_reports_spend_without_quality(tmp_path):
@@ -263,6 +278,9 @@ def test_stopped_baseline_reports_spend_without_quality(tmp_path):
         mode="baseline", status="failed", pipeline_complete=False, final_commit=None
     )
     save(arm / "manifest.json", manifest)
+    summary = root / "summary"
+    summary.mkdir()
+    save(summary / "stopped-process-diagnostic.json", {"reason": "fixture"})
     out = tmp_path / "output"
     report.write_report(root, out)
     contents = (out / "REPORT.md").read_text()
@@ -274,6 +292,12 @@ def test_stopped_baseline_reports_spend_without_quality(tmp_path):
     )
     assert "Публичные тесты" not in contents
     assert "привязка QA" not in contents
+    dashboard = (out / "dashboard.html").read_text()
+    assert "<h3>stopped</h3>" in dashboard
+    assert "<strong>100 RPT</strong>" in dashboard
+    assert "Конвейер остановился до итоговой приёмки." in dashboard
+    assert 'href="../runs/summary/stopped-process-diagnostic.json"' in dashboard
+    assert "Публичные тесты" not in dashboard
 
 
 def test_running_baseline_leaves_accounting_and_quality_pending(tmp_path):
@@ -283,6 +307,13 @@ def test_running_baseline_leaves_accounting_and_quality_pending(tmp_path):
     manifest = report.read_json(manifest_file)
     manifest.update(mode="baseline", status="running", pipeline_complete=True)
     save(manifest_file, manifest)
+    mock = make_arm(root, "mock", "base", 42, dry=True)
+    smoke = make_arm(root, "smoke", "base", 7)
+    for folder, fields in [(mock, {}), (smoke, {"purpose": "go-smoke"})]:
+        path = folder / "manifest.json"
+        contents = report.read_json(path)
+        contents.update(mode="baseline", pipeline_complete=True, **fields)
+        save(path, contents)
 
     checked = report.inspect_run(arm)
     assert checked.errors == ["выполняется"]
@@ -294,3 +325,48 @@ def test_running_baseline_leaves_accounting_and_quality_pending(tmp_path):
     contents = (out / "REPORT.md").read_text()
     assert "выполняется" in contents
     assert "Живой B0 · active" not in contents
+    dashboard = (out / "dashboard.html").read_text()
+    assert "выполняется" in dashboard
+    assert "Архив замеров B0" not in dashboard
+    assert "<meter" not in dashboard
+
+
+def test_archived_baseline_dashboard_only_shows_verified_usage(tmp_path):
+    root = tmp_path / "runs"
+    name = 'run<fixture>"'
+    arm = make_arm(root, name, "base", 100)
+    manifest_file = arm / "manifest.json"
+    manifest = report.read_json(manifest_file)
+    manifest.update(mode="baseline", status="interrupted", pipeline_complete=False)
+    save(manifest_file, manifest)
+    calls_file = arm / "calls.jsonl"
+    call = json.loads(calls_file.read_text())
+    second_call = dict(call, event_key="second-step", stage="apply", t_in=300)
+    calls_file.write_text(f"{json.dumps(call)}\n{json.dumps(second_call)}\n")
+    meter_file = arm / "meter.json"
+    meter = report.read_json(meter_file)
+    meter["sha256"]["calls.jsonl"] = report.sha256(calls_file)
+    meter.update(rpt=400, call_count=2)
+    meter["by_stage"]["apply"] = {"call_count": 1, "rpt": 300}
+    save(meter_file, meter)
+
+    out = tmp_path / "output"
+    report.write_report(root, out)
+    dashboard = (out / "dashboard.html").read_text()
+    assert "<h3>run&lt;fixture&gt;&quot;</h3>" in dashboard
+    assert 'href="../runs/run%3Cfixture%3E%22/manifest.json"' in dashboard
+    assert "<strong>400 RPT</strong> · Вызовы модели 2" in dashboard
+    assert dashboard.index(
+        '<meter max="400" value="100" aria-hidden="true"></meter> 25.0%'
+    ) < dashboard.index(
+        '<meter max="400" value="300" aria-hidden="true"></meter> 75.0%'
+    )
+
+    meter.update(complete=False, issues=["<testsuite>private-detail</testsuite>"])
+    save(meter_file, meter)
+    report.write_report(root, out)
+    dashboard = (out / "dashboard.html").read_text()
+    assert "Полный расход не подтверждён." in dashboard
+    assert "private-detail" not in dashboard
+    assert "<meter" not in dashboard
+    assert "400 RPT" not in dashboard
