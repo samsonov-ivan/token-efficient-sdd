@@ -12,13 +12,17 @@ const commands = {
 
 type Command = keyof typeof commands;
 
+const qualityUsage =
+  '<change> --expected FILE --out DIR [--repo DIR] [--infer] [--prepare | --assessment FILE] ' +
+  '[--signature FILE --reviewer-key FILE] [--openspec BIN] [--capability ID]';
+
 const moduleUsage: Partial<Record<Command, string>> = {
-  consistency: '[options]',
-  gates: '[options]',
+  consistency: `${qualityUsage} [--evidence FILE]`,
+  gates: `${qualityUsage} --evidence FILE`,
   meter: '<run-dir> [--out <dir>]',
   report: '<runs-dir> [options]',
   run: '--mode <mode> --feature <id> --model <id> [--runs N] [--dry-run]',
-  trace: '[options]',
+  trace: `${qualityUsage} --evidence FILE`,
 };
 
 function isCommand(value: string): value is Command {

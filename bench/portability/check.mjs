@@ -57,7 +57,13 @@ try {
     const api = run(['go', 'doc', '-short', '.']);
     if (/^\s*func ParseCanonical\(/m.test(api)) throw new Error('Proposed API already present');
   }
-  run(spec.test);
+  const testOutput = run(spec.test);
+  if (id === 'google-uuid') {
+    const events = testOutput.split(/\r?\n/).map((line) => JSON.parse(line));
+    const tests = events.filter((event) => event.Test && ['pass', 'skip', 'fail'].includes(event.Action));
+    record.tests = Object.fromEntries(['pass', 'skip', 'fail'].map((state) => [state, tests.filter((test) => test.Action === state).length]));
+    if (!record.tests.pass || record.tests.skip || record.tests.fail) throw new Error('Incomplete Go regression suite');
+  }
   if (run(['git', 'status', '--porcelain=v1']) !== '') throw new Error('Checkout changed during checks');
   record.passed = true;
 } catch (error) {
