@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -55,6 +55,7 @@ function fixture() {
   const baseTree = git('write-tree');
   writeAPI('needs fix', 'unrelated tail');
   writeFileSync(join(repo, 'another.txt'), 'untouched by fix\n');
+  const gates = join(root, 'gates.json');
   const options = {
     mode: 'optimized' as const,
     flags: { incremental_review: true, checklist_review: true, targeted_fix: true },
@@ -63,15 +64,22 @@ function fixture() {
     archive: join(root, 'review'),
     changeId: 'fixture',
   };
+  let fixes = 0;
   const driver = {
     snapshot,
-    context: async () => ({
-      requirements: [requirement],
-      conventions: 'Use explicit errors.',
-      gates: { summary: 'Passed all public tests', fullPath: join(root, 'gates.json') },
-    }),
+    context: async (tree: string) => {
+      writeFileSync(gates, JSON.stringify({ tree, ok: true }));
+      return {
+        requirements: [requirement],
+        conventions: 'Use explicit errors.',
+        gates: { summary: 'Passed all public tests', fullPath: gates, ok: true, tree },
+      };
+    },
     review: vi.fn(async (p: ReviewPacket) => response(p)),
-    fix: vi.fn(async (_p: FixPacket) => writeAPI('fixed', 'unrelated tail')),
+    fix: vi.fn(async (_p: FixPacket) => {
+      fixes++;
+      writeAPI(fixes === 1 ? 'fixed' : `fixed revision ${fixes}`, 'unrelated tail');
+    }),
     verify: vi.fn(async (_tree: string) => true),
   };
   return { options, driver, writeAPI };
@@ -152,6 +160,49 @@ it('rejects approval with an unresolved omitted blocker', async () => {
     p.iteration === 1 ? response(p, [blocking], 'changes_requested') : response(p),
   );
   await expect(runOptimizedReview(options, driver)).rejects.toThrow(/disagrees/);
+  expect(driver.verify).not.toHaveBeenCalled();
+});
+
+it.each(['open', 'resolved'] as const)(
+  'rejects a downgrade to minor when the blocker was %s',
+  async (status) => {
+    const { options, driver } = fixture();
+    driver.review.mockImplementation(async (p) => {
+      if (p.iteration === 1) return response(p, [blocking], 'changes_requested');
+      if (p.iteration === 2 && status === 'resolved') return response(p, [{ ...blocking, status }]);
+      return response(p, [{ ...blocking, severity: 'minor' }]);
+    });
+    await expect(runOptimizedReview(options, driver)).rejects.toThrow(/cannot downgrade/i);
+    expect(driver.verify).not.toHaveBeenCalled();
+  },
+);
+
+it('keeps the same blocker open when it recurs during full sanity, then verifies after its fix', async () => {
+  const { options, driver } = fixture();
+  driver.review.mockImplementation(async (p) => {
+    if (p.iteration === 1 || p.iteration === 3) return response(p, [blocking], 'changes_requested');
+    if (p.iteration === 2 || p.iteration === 4)
+      return response(p, [{ ...blocking, status: 'resolved' }]);
+    return response(p);
+  });
+  const result = await runOptimizedReview(options, driver);
+  expect(driver.review.mock.calls.map(([p]) => [p.scope, p.final])).toEqual([
+    ['full', false],
+    ['delta', false],
+    ['full', true],
+    ['delta', false],
+    ['full', true],
+  ]);
+  expect(driver.fix.mock.calls[1][0].openFindings).toEqual([blocking]);
+  expect(driver.verify).toHaveBeenCalledExactlyOnceWith(result?.tree);
+});
+
+it('rejects a no-op fix before asking the reviewer to resolve a blocker', async () => {
+  const { options, driver } = fixture();
+  driver.review.mockImplementation(async (p) => response(p, [blocking], 'changes_requested'));
+  driver.fix.mockResolvedValue(undefined);
+  await expect(runOptimizedReview(options, driver)).rejects.toThrow(/fix did not change/i);
+  expect(driver.review).toHaveBeenCalledOnce();
   expect(driver.verify).not.toHaveBeenCalled();
 });
 
@@ -237,13 +288,55 @@ it.each(['review', 'verify'] as const)(
   },
 );
 
+it.each(['red', 'stale', 'missing'] as const)(
+  'requires fresh green evidence before review when the gate is %s',
+  async (invalid) => {
+    const { options, driver } = fixture();
+    const context = driver.context;
+    driver.context = async (tree) => {
+      const input = await context(tree);
+      if (invalid === 'red') input.gates.ok = false;
+      if (invalid === 'stale') input.gates.tree = options.baseTree;
+      if (invalid === 'missing') input.gates.fullPath += '.missing';
+      return input;
+    };
+    await expect(runOptimizedReview(options, driver)).rejects.toThrow(/gates|gate evidence/);
+    expect(driver.review).not.toHaveBeenCalled();
+    expect(driver.verify).not.toHaveBeenCalled();
+  },
+);
+
+it('reruns gates after a fix and stops when they report the previous snapshot', async () => {
+  const { options, driver } = fixture();
+  const input = await driver.context(await driver.snapshot());
+  const context = vi.fn(async (_tree: string) => input);
+  driver.context = context;
+  driver.review.mockImplementation(async (p) => response(p, [blocking], 'changes_requested'));
+  await expect(runOptimizedReview(options, driver)).rejects.toThrow(/green gates/);
+  expect(context).toHaveBeenCalledTimes(2);
+  expect(context.mock.calls[1][0]).not.toBe(context.mock.calls[0][0]);
+  expect(driver.review).toHaveBeenCalledOnce();
+});
+
+it('rejects a worktree mutation while preparing deterministic gates', async () => {
+  const { options, driver, writeAPI } = fixture();
+  const context = driver.context;
+  driver.context = async (tree) => {
+    const input = await context(tree);
+    writeAPI('mutated by gates', 'unrelated tail');
+    return input;
+  };
+  await expect(runOptimizedReview(options, driver)).rejects.toThrow(/context modified/);
+  expect(driver.review).not.toHaveBeenCalled();
+});
+
 it('fails closed when the checklist has no source requirements', async () => {
   const { options, driver } = fixture();
   await expect(
     runOptimizedReview(options, {
       ...driver,
-      context: async () => ({
-        ...(await driver.context()),
+      context: async (tree) => ({
+        ...(await driver.context(tree)),
         requirements: [],
       }),
     }),

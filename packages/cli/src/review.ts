@@ -1,5 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { Ajv } from 'ajv';
 import { writeJson } from './harness/io.js';
@@ -43,7 +50,7 @@ interface Packet {
   diff: string;
   fullPatch: string;
   openFindings: Finding[];
-  gates: { summary: string; fullPath: string };
+  gates: { summary: string; fullPath: string; ok: boolean; tree: string };
 }
 export interface ReviewPacket extends Packet {
   scope: Findings['scope'];
@@ -134,13 +141,8 @@ function applyFindings(raw: string, request: ReviewPacket, previous: Finding[]) 
   for (const f of report.findings) {
     if (updated.has(f.id)) throw new Error(`Duplicate finding ID: ${f.id}`);
     const old = ledger.get(f.id);
-    if (
-      old?.status === 'open' &&
-      old.severity === 'blocking' &&
-      f.status === 'open' &&
-      f.severity !== 'blocking'
-    )
-      throw new Error(`Explicitly resolve blocking finding: ${f.id}`);
+    if (old?.severity === 'blocking' && f.severity !== 'blocking')
+      throw new Error(`Cannot downgrade blocking finding: ${f.id}`);
     updated.add(f.id);
     ledger.set(f.id, f);
   }
@@ -199,10 +201,13 @@ export async function runOptimizedReview(options: ReviewOptions, driver: ReviewD
   mkdirSync(archive);
   let findings: Finding[] = [];
   let previousTree: string | undefined;
+  let expectedTree: string | undefined;
   let needsFinal = false;
   const rounds = [];
   for (let iteration = 1; iteration <= 5; iteration++) {
     const tree = treeId(await driver.snapshot());
+    if (expectedTree !== undefined && tree !== expectedTree)
+      throw new Error('Snapshot changed between review rounds');
     const final = needsFinal || iteration === 5;
     const dir = join(archive, `round-${iteration}`);
     mkdirSync(dir);
@@ -221,6 +226,15 @@ export async function runOptimizedReview(options: ReviewOptions, driver: ReviewD
       }
     }
     const context = await driver.context(tree);
+    if ((await driver.snapshot()) !== tree) throw new Error('Review context modified its snapshot');
+    if (context.gates.ok !== true || context.gates.tree !== tree)
+      throw new Error('Review requires green gates for the current snapshot');
+    if (
+      !context.gates.summary.trim() ||
+      !isAbsolute(context.gates.fullPath) ||
+      !lstatSync(context.gates.fullPath, { throwIfNoEntry: false })?.isFile()
+    )
+      throw new Error('Missing review gate evidence');
     if (!context.requirements.length)
       throw new Error('No specification requirements supplied for review');
     const request: ReviewPacket = {
@@ -246,7 +260,7 @@ export async function runOptimizedReview(options: ReviewOptions, driver: ReviewD
     if (checklist) {
       request.outputSchema = schema;
       request.instructions +=
-        ' Return findings JSON using stable IDs. Explicitly resolve fixed issues. Request changes while blocking findings remain.';
+        ' Return findings JSON using stable IDs. Keep the blocking severity when resolving or reopening a blocker. Explicitly resolve fixed issues. Request changes while blocking findings remain.';
       if (scope === 'full')
         request.checklist = [...context.requirements].sort(compareIds).map((requirement) => ({
           requirement,
@@ -281,6 +295,7 @@ export async function runOptimizedReview(options: ReviewOptions, driver: ReviewD
       return { rounds, findings, tree };
     }
     needsFinal = !blocked;
+    expectedTree = tree;
     if (blocked) {
       const open = findings.filter((f) => f.status === 'open');
       const hunks = targeted ? fixHunks(repo, baseTree, tree, open) : undefined;
@@ -296,6 +311,8 @@ export async function runOptimizedReview(options: ReviewOptions, driver: ReviewD
         scope: hunks === undefined ? 'full' : 'hunks',
         diff: hunks ?? full,
       });
+      expectedTree = treeId(await driver.snapshot());
+      if (expectedTree === tree) throw new Error('Fix did not change its snapshot');
     }
     previousTree = tree;
   }
