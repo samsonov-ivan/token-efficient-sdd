@@ -6,6 +6,8 @@ import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   appendFileSync,
+  cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -27,15 +29,16 @@ import {
   runnerEnvironment,
 } from '../packages/cli/dist/harness/runner.js';
 import { meterRun } from '../packages/cli/dist/meter.js';
+import { yoctoFixture } from './fixtures/yocto-queue.mjs';
 import { compareApplyContext, verifyApplyContext } from './fixtures/apply-context.mjs';
 
 const [mode, destination] = process.argv.slice(2);
 assert(
   process.argv.length === 2 ||
-    (['--compare-apply-context', '--verify-apply-context'].includes(mode) &&
+    (['--compare-apply-context', '--verify-apply-context', '--yocto-queue'].includes(mode) &&
       destination &&
       process.argv.length === 4),
-  'Usage: node scripts/probe-live-opt.mjs [--compare-apply-context NEW_DIRECTORY | --verify-apply-context DIRECTORY]',
+  'Usage: node scripts/probe-live-opt.mjs [--compare-apply-context NEW_DIRECTORY | --verify-apply-context DIRECTORY | --yocto-queue NEW_DIRECTORY]',
 );
 if (mode === '--verify-apply-context') {
   console.log(
@@ -50,7 +53,7 @@ const tmp = realpathSync(tmpdir());
 assert(relative(project, tmp) === '..' || relative(project, tmp).startsWith('..' + sep));
 const root = mkdtempSync(join(tmp, 'frugal-native-opt-'));
 const repo = join(root, 'repo');
-const runDir = join(root, 'native-h01');
+const runDir = join(root, mode === '--yocto-queue' ? basename(resolve(destination)) : 'native-h01');
 const raw = join(runDir, 'raw');
 mkdirSync(repo);
 mkdirSync(join(raw, 'stages'), { recursive: true });
@@ -65,9 +68,9 @@ const env = {
   NO_PROXY: '127.0.0.1,localhost,::1',
 };
 const runFile = promisify(execFile);
-const execute = (binary, args, runtimeEnv = env) => {
+const execute = (binary, args, runtimeEnv = env, cwd = repo) => {
   const run = runFile(binary, args, {
-    cwd: repo,
+    cwd,
     env: runtimeEnv,
     timeout: 45000,
     killSignal: 'SIGKILL',
@@ -76,12 +79,21 @@ const execute = (binary, args, runtimeEnv = env) => {
   run.child.stdin.end();
   return run;
 };
-const feature = 'issue-receipt';
-const change = `openspec/changes/${feature}`;
-const brief = 'Issue a fresh public identifier and store a matching receipt.';
-const model = 'frugal-fixture/smoke';
 const reference = randomUUID();
-const firstNote = `Issued the public identifier.\nReference: ${reference}\nNext: store a matching receipt.`;
+const write = (path, content) => ({ name: 'write', args: { filePath: join(repo, path), content } });
+const read = (path) => ({ name: 'read', args: { filePath: join(repo, path) } });
+const portability =
+  mode === '--yocto-queue'
+    ? yoctoFixture({ project, repo, runDir, execute, env, reference, read, write })
+    : undefined;
+if (portability) assert(!existsSync(resolve(destination)), 'Choose a new evidence directory');
+const feature = portability?.feature ?? 'issue-receipt';
+const change = `openspec/changes/${feature}`;
+const brief = portability?.brief ?? 'Issue a fresh public identifier and store a matching receipt.';
+const model = 'frugal-fixture/smoke';
+const firstNote =
+  portability?.firstNote ??
+  `Issued the public identifier.\nReference: ${reference}\nNext: store a matching receipt.`;
 const remarks = 'BLOCKING: Document the receipt format.\nVERDICT: CHANGES REQUESTED';
 const files = {
   [change + '/proposal.md']: '## Why\n\nA caller needs an identifier and confirmation.\n',
@@ -91,9 +103,8 @@ const files = {
   [change + '/tasks.md']:
     '- [ ] 1.1 Issue a public identifier. REQ-ID-01 SCN-ID-01.1\n- [ ] 1.2 Write its receipt. REQ-ID-01 SCN-ID-01.1\n',
 };
-const write = (path, content) => ({ name: 'write', args: { filePath: join(repo, path), content } });
-const read = (path) => ({ name: 'read', args: { filePath: join(repo, path) } });
 function actions(request) {
+  if (portability) return portability.actions(request);
   switch (request.stage) {
     case 'spec':
       return [
@@ -224,7 +235,8 @@ try {
     permission: { '*': 'deny', edit: 'allow', read: 'allow' },
   });
   assert.equal((await execute(opencode, ['--version'])).stdout.trim(), '1.19.6');
-  git(repo, ['init', '-q']);
+  if (portability) await portability.setup();
+  else git(repo, ['init', '-q']);
   await execute(platformBin(project, 'openspec'), [
     'init',
     '--tools',
@@ -235,16 +247,17 @@ try {
   ]);
   writeFileSync(
     join(repo, 'frugal.yaml'),
-    'version: 1\nflags: {session_per_task: true}\ntest: {command: node --test, report: tap}\n',
+    `version: 1\nflags: {session_per_task: true}\ntest: {command: ${portability ? 'npm test' : 'node --test'}, report: ${portability ? 'text' : 'tap'}}\n`,
   );
-  writeFileSync(
-    join(repo, 'public.test.mjs'),
-    `import {readFileSync} from 'node:fs'; import assert from 'node:assert/strict'; import test from 'node:test';
+  if (!portability)
+    writeFileSync(
+      join(repo, 'public.test.mjs'),
+      `import {readFileSync} from 'node:fs'; import assert from 'node:assert/strict'; import test from 'node:test';
 const text=path=>readFileSync(path,'utf8').trim();
 test('issue',()=>assert.match(text('public-id.txt'),/^[0-9a-f-]{36}$/));
 test('receipt',()=>assert.equal(text('receipt.txt'),text('public-id.txt')));
 `,
-  );
+    );
   const snapshot = async () => {
     const index = { GIT_INDEX_FILE: join(root, 'tmp', 'probe.index') };
     git(repo, ['add', '-A'], index);
@@ -263,6 +276,7 @@ test('receipt',()=>assert.equal(text('receipt.txt'),text('public-id.txt')));
     maxRetries: 0,
     snapshot,
     async checkTask(taskId) {
+      if (portability) return portability.gate(taskId);
       const name = { 1.1: 'issue', 1.2: 'receipt' }[taskId];
       assert(name, 'Expected a public fixture task');
       const test = await execute(process.execPath, [
@@ -294,6 +308,23 @@ test('receipt',()=>assert.equal(text('receipt.txt'),text('public-id.txt')));
       appendFileSync(join(raw, 'events.jsonl'), response.stdout);
       const reply = stageReply(response);
       assert.equal(turn.position, turn.actions.length);
+      if (portability) {
+        const events = response.stdout
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
+        const toolEvents = events.filter((event) => event.type === 'tool_use');
+        assert.deepEqual(
+          toolEvents.map((event) => event.part.tool),
+          turn.actions.filter((step) => typeof step !== 'string').map((step) => step.name),
+        );
+        assert(
+          toolEvents.every(
+            (event) => event.sessionID === reply.session && event.part.state.status === 'completed',
+          ),
+        );
+      }
       stages.push({
         stage: request.stage,
         task: request.task,
@@ -307,18 +338,24 @@ test('receipt',()=>assert.equal(text('receipt.txt'),text('public-id.txt')));
   });
   assert.deepEqual(
     stages.map((s) => s.stage),
-    ['spec', 'apply', 'apply', 'review', 'fix', 'review', 'verify'],
+    portability
+      ? ['spec', 'apply', 'apply', 'review', 'verify']
+      : ['spec', 'apply', 'apply', 'review', 'fix', 'review', 'verify'],
   );
   assert.equal(new Set(stages.map((s) => s.session_id)).size, stages.length);
-  assert.equal(readFileSync(join(repo, 'receipt.txt'), 'utf8'), reference);
+  if (!portability) assert.equal(readFileSync(join(repo, 'receipt.txt'), 'utf8'), reference);
   const tree = await snapshot();
   assert.deepEqual(
     output.reviews.map((r) => r.verdict),
-    ['fix', 'pass'],
+    portability ? ['pass'] : ['fix', 'pass'],
   );
   assert.equal(output.reviews.at(-1).tree, tree);
   assert.equal(output.stages.at(-1).output.tree, tree);
   assert.deepEqual(readJson(join(runDir, 'opt/quality-review.json')), output.reviews);
+  const portabilityResult = portability
+    ? await portability.finish(platformBin(project, 'openspec'), tree)
+    : undefined;
+  assert.equal(await snapshot(), tree);
   for (const { session_id } of stages) {
     const exported = JSON.parse((await execute(opencode, ['export', session_id])).stdout);
     assert.equal(exported.info.id, session_id);
@@ -346,6 +383,12 @@ test('receipt',()=>assert.equal(text('receipt.txt'),text('public-id.txt')));
     host: '1.19.6',
     model,
     fixture: true,
+    ...(portabilityResult && {
+      scope:
+        'Public native H-01 portability with a loopback fixture; external model QA and token savings unmeasured.',
+      ...portabilityResult,
+      stages,
+    }),
     tree,
     apply,
     review_rounds: output.reviews.length,
@@ -353,8 +396,13 @@ test('receipt',()=>assert.equal(text('receipt.txt'),text('public-id.txt')));
     provider_requests: requests.length,
   });
   console.log(
-    `PASS: ${stages.length} native invocations; two apply sessions, fix, full review and verification on tree ${tree}; ${requests.length} loopback calls reconciled.`,
+    `PASS: ${stages.length} native invocations; two apply sessions, full review and verification on tree ${tree}; ${requests.length} loopback calls reconciled.`,
   );
+  if (portability) {
+    writeJson(join(runDir, 'fixture-requests.json'), requests);
+    cpSync(runDir, resolve(destination), { recursive: true, force: false, errorOnExist: true });
+    console.log('Portability evidence:', resolve(destination));
+  }
   if (mode === '--compare-apply-context') {
     const context = await compareApplyContext({
       directory: resolve(destination),

@@ -1,0 +1,147 @@
+{
+  "host": "1.19.6",
+  "model": "frugal-fixture/smoke",
+  "fixture": true,
+  "scope": "Public native H-01 portability with a loopback fixture; external model QA and token savings unmeasured.",
+  "upstream": "https://github.com/sindresorhus/yocto-queue.git",
+  "commit": "72a8fa96a9d389765cdf2bb9c6daba8302fc375d",
+  "input_tree": "0b81d56218d4a4ab1b9ec91109e7b5d493e123d7",
+  "deps_lock_sha256": "a25eecbb6384dd6cbb4b74139d4c9dba45804147d7693248c2745a3a602bde58",
+  "node": "v24.15.0",
+  "openspec": "2.1.1",
+  "public_tests_fail_on_unmodified_upstream": [
+    "javascript",
+    "typescript"
+  ],
+  "changed_upstream_files": [
+    "index.d.ts",
+    "index.js",
+    "index.test-d.ts",
+    "readme.md",
+    "test.js"
+  ],
+  "upstream_ava_before": 7,
+  "upstream_ava_after": 8,
+  "tsd_before_after": true,
+  "original_tests_preserved": true,
+  "openspec_strict": true,
+  "checks": {
+    "install": {
+      "command": [
+        "npm",
+        "ci",
+        "--offline",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund"
+      ],
+      "code": 0,
+      "sha256": "b6b20a9b5a02c1d74bfc8c9d13ab6fa0130e7688d96b9a4391dfc9d2a7eb9fc1"
+    },
+    "upstream-before": {
+      "command": [
+        "npm",
+        "test"
+      ],
+      "code": 0,
+      "sha256": "5dd02ea91a3f1a813473ef37f5121779271cc6ee109f8ca824e8ba91f9c7e40d"
+    },
+    "gate-runtime": {
+      "command": [
+        "node",
+        "node_modules/ava/cli.js",
+        "--match=.peekLast()",
+        "test.js"
+      ],
+      "code": 0,
+      "sha256": "31b522d29f8d6573b35b4232af9e70615d61e6f9ae96f7b44ef1afb9c5945934"
+    },
+    "gate-types": {
+      "command": [
+        "node",
+        "node_modules/tsd/dist/cli.js"
+      ],
+      "code": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "negative-runtime": {
+      "command": [
+        "node",
+        "node_modules/ava/cli.js",
+        "--match=.peekLast()",
+        "test.js"
+      ],
+      "code": 1,
+      "sha256": "fe034cf50f709c80f713304594e1eca4bb4ce263d011b505a847fd717ad6bbec"
+    },
+    "negative-types": {
+      "command": [
+        "node",
+        "node_modules/tsd/dist/cli.js"
+      ],
+      "code": 1,
+      "sha256": "936006ec7041cffc506057cfbb3d905199050fd15a4a93e3f9c63503b554180f"
+    },
+    "upstream-after": {
+      "command": [
+        "npm",
+        "test"
+      ],
+      "code": 0,
+      "sha256": "8992772ae6c134cb3babd4254c341ad0f1e6bfca4285cb8623b3477cced45df1"
+    },
+    "openspec-strict": {
+      "command": [
+        "openspec",
+        "validate",
+        "add-peek-last",
+        "--strict"
+      ],
+      "code": 0,
+      "sha256": "354c2229ab2d92a0dd9bae3b07a5650e713eb1949ca7063f57a41fb407c7f709"
+    }
+  },
+  "stages": [
+    {
+      "stage": "spec",
+      "session_id": "ses_dff7b2a25ffehlIkB51Nk5J0LB",
+      "started_at": "2026-11-21T23:50:34.796Z",
+      "finished_at": "2026-11-21T23:50:37.055Z"
+    },
+    {
+      "stage": "apply",
+      "task": "1.1",
+      "session_id": "ses_dff7b214dffeBExws8fn5Asnvc",
+      "started_at": "2026-11-21T23:50:37.106Z",
+      "finished_at": "2026-11-21T23:50:38.592Z"
+    },
+    {
+      "stage": "apply",
+      "task": "1.2",
+      "session_id": "ses_dff7b1a7cffea7fk0QiCp6OeVA",
+      "started_at": "2026-11-21T23:50:38.828Z",
+      "finished_at": "2026-11-21T23:50:40.785Z"
+    },
+    {
+      "stage": "review",
+      "review_iter": 1,
+      "session_id": "ses_dff7b0e85ffeZlD7OAooeXTbZU",
+      "started_at": "2026-11-21T23:50:41.893Z",
+      "finished_at": "2026-11-21T23:50:43.969Z"
+    },
+    {
+      "stage": "verify",
+      "session_id": "ses_dff7b0623ffehLAWZy5Cv7wurb",
+      "started_at": "2026-11-21T23:50:44.022Z",
+      "finished_at": "2026-11-21T23:50:46.115Z"
+    }
+  ],
+  "tree": "a9f14500e0daecd6643d950ec5f40501d1546c5c",
+  "apply": [
+    "ses_dff7b214dffeBExws8fn5Asnvc",
+    "ses_dff7b1a7cffea7fk0QiCp6OeVA"
+  ],
+  "review_rounds": 1,
+  "verify": true,
+  "provider_requests": 37
+}
