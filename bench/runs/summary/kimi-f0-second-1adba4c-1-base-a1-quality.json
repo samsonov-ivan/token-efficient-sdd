@@ -1,0 +1,88 @@
+{
+  "additional_static_findings": [
+    "SCN-LIM-01.4: the empty daily counter on upgrade omits already accepted same-day transfers in a pre-existing database.",
+    "SCN-LIM-06.1: the journal sorts by timestamp first instead of insertion order."
+  ],
+  "answers_sha256": {
+    "apply": "7f2f2ff10cf7936f480f52a2e5ef89d8668a155743697d8364cf5c59e98783b2",
+    "review-1": "e1a39eb076454ff92035039507b7ea876678c1ce6298346011db61d5ead841b1",
+    "spec": "bd89f703d6f62b8ce1bca2104f10fec7ee9a973446dfae911450a6a7901f296d",
+    "verify": "bfd430909b61f37f0288f55996575b188fb11c0074e797915d2213b7164b25b4"
+  },
+  "artifact_structure": {
+    "inferred_links": 5,
+    "unlinked_modified_baseline_scenarios": [
+      "SCN-TXN-01.2",
+      "SCN-TXN-01.4",
+      "SCN-TXN-02.2",
+      "SCN-TXN-02.3"
+    ]
+  },
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "baseline_assets_sha256": "bd5d3e928bde7061ff832c543da6924eb152bd4caf735e32eb21416a79aa64d9",
+  "baseline_regression_tests": 68,
+  "baseline_sha256": "1df3faeb604bf5c0a4f5d6bc9bdf808368e74635a9975077a1e198ed8684335a",
+  "bundle_sha256": "40df362c1a5dfa461bf9cc61e4836db965b0799bb968ec00effb255d6fd271bc",
+  "final_commit": "efeac77a397191c716b663ca900d6417cf82fe25",
+  "frozen_original_public": {
+    "passed": 68,
+    "total": 68
+  },
+  "frozen_regression": true,
+  "guard_commit": "1adba4c9fc033c1ca1738414f86fb88e6d4f982f",
+  "manifest_sha256": "b7059d4a8b8887adecb893b33ec24a7efe454f9232c7fcf86fafae8de8d53523",
+  "pipeline_complete": true,
+  "public_contract_defects": [
+    "SCN-LIM-05.3: passing a valid large offset to SQLite overflows instead of returning the expected empty page with unchanged total.",
+    "SCN-LIM-06.1: audit items contain database ID and a top-level kind in addition to the contracted before, after, and at fields."
+  ],
+  "request_sha256": "dceb14b9ec2d9c8777b010f300ce2b33bcd3fcd267fbbe4982762b7782f9b897",
+  "review_bound_to_final": true,
+  "review_rounds": 1,
+  "run_id": "kimi-f0-second-1adba4c-1-base-a1",
+  "signed_quality": {
+    "artifact_sha256": {
+      "assessment.json": "2d02fa3ff5796f19f1dbe17b726c80ea619bcef1958ff7d3757ee31c6880756f",
+      "assessment.sig": "899ab54ca30c9105cf7d83d977094ecb79081390e4b10d2e577a7d31514bfdab",
+      "reviewer.pem": "b5aee87573c2d04cd46c3b070d9d8716da11f3eca7bc47257f33fb16c2ff6846",
+      "verdict/gates.json": "d72b85a9c80d485c86722236978abd0a273a1c545eaaee557c19ab032ee6c9a2",
+      "verdict/trace.json": "ac9c1bfa5b7f87810573ed983f09abee94745091596ab4b80072058a11519636"
+    },
+    "failed_checks": [
+      "consistency",
+      "trace",
+      "semantic"
+    ],
+    "metrics": {
+      "Cons": 0,
+      "Cov_expected": 0.4444444444444444,
+      "Cov_req": 0.75,
+      "Cov_scn": 0.84,
+      "Cov_task": 1,
+      "Green": 1,
+      "Q_hidden": 0.9333333333333333,
+      "R": 1
+    },
+    "passed": false,
+    "signature": "Ed25519",
+    "verified_trace_links": 21
+  },
+  "status": "failed",
+  "tests": {
+    "hidden": {
+      "missing": 0,
+      "observed": 30,
+      "passed": 28,
+      "report_sha256": "721ce9c36d6c2152b0110c5089f068d73669336db21e62da33d54172a2c80903",
+      "required": 30
+    },
+    "public": {
+      "missing": 0,
+      "observed": 117,
+      "passed": 117,
+      "report_sha256": "33171236baaef3bb11a22f551e7ebaffb006c47ed51d8b79f08a9d32cebfbfe2",
+      "required": 68
+    }
+  },
+  "tracked_changes": 21
+}

@@ -1,0 +1,109 @@
+{
+  "accepted": false,
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "baseline_assets_sha256": "bd5d3e928bde7061ff832c543da6924eb152bd4caf735e32eb21416a79aa64d9",
+  "baseline_sha256": "674f572850c984d097dd684e5801d81266affda2a4d382f5ef611435fa453af7",
+  "diagnostic_scope": "post-pipeline attempt audit",
+  "evaluator_request_produced": false,
+  "final_snapshot_produced": false,
+  "kind": "b0-pre-snapshot-stage-diagnostic",
+  "manifest_sha256": "5a46655f289941a884d189a10cb855161087204aff6051ab125bde76b4a33978",
+  "meter_replay": {
+    "allowance": 0.07449474000000003,
+    "billing_source_counts": {
+      "go": 98
+    },
+    "complete": true,
+    "cost": 0,
+    "http_status_counts": {
+      "200": 98
+    },
+    "list_cost": 0.12415793000000003,
+    "model_calls": 98,
+    "reasoning_effort_counts": {
+      "max": 98
+    },
+    "review_model_calls": 17,
+    "rpt": 6235707
+  },
+  "meter_sha256": "2eb431ffbe5d784ef9e2d1bd14f013e8e47d9bb3839f365102e514167513fda7",
+  "pipeline_complete": false,
+  "product_quality_observed": false,
+  "raw_events_sha256": "ba45531aeddf14c88b3d31dee7f81522f0d30db9aaf772740845e9a517c96013",
+  "relay_sha256": "f3b647bcac0f85b2b49c6540591093d74016b0505e03f1bfba67810bfb44cb35",
+  "requested_variant": "max",
+  "review_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "review_stage": {
+    "classification": "OpenCode headless review stopped after a Bash redirect to container-local tmpfs was denied by the external-directory rule",
+    "completed_neighbor_tool_event_line": 65,
+    "container_tmp_is_tmpfs": true,
+    "denied_container_directory": "/tmp/*",
+    "denied_operation": "redirect pytest stdout and stderr to a temporary log for a repeated public concurrency check",
+    "denied_permission": "external_directory",
+    "denied_tool": "bash",
+    "denied_tool_event_line": 64,
+    "malformed_performer_repo_path": false,
+    "open_code_sources": [
+      "https://github.com/anomalyco/opencode/blob/v1.19.6/packages/opencode/src/cli/cmd/run.ts#L749-L763",
+      "https://github.com/anomalyco/opencode/blob/v1.19.6/packages/opencode/src/session/processor.ts#L188-L190",
+      "https://github.com/anomalyco/opencode/blob/v1.19.6/packages/opencode/src/session/processor.ts#L603-L655"
+    ],
+    "outside_checkout_scope": true,
+    "planned_concurrency_tests_per_iteration": 3,
+    "planned_iterations": 10,
+    "round": 1,
+    "runner_completion_check_rejected_unfinished_stage": true,
+    "runner_error": "No completed model response (finish=tool-calls)",
+    "stderr_sha256": "0f49ec902d2e2e601082217b1037664d50ec74703d56693daff9f541a563df80",
+    "terminal_finish_event_line": 66,
+    "terminal_finish_reason": "tool-calls",
+    "terminal_step_has_text": false,
+    "terminal_verdict_produced": false
+  },
+  "run_id": "max-f0-first-f1f8742-1-base-a1",
+  "runner_commit": "f1f87429352157e0bbfeb061b5ca376af457ccf9",
+  "stages": [
+    {
+      "answer_saved": true,
+      "assistant_text_events": 6,
+      "error_events": 0,
+      "finish_reasons": {
+        "stop": 1,
+        "tool-calls": 31
+      },
+      "finished_steps": 32,
+      "stage": "spec",
+      "stdout_sha256": "6db016c48f1720cc369fb1bf6616bcb8db071ca01b18d73e985eaca22b0acfe5",
+      "terminal_finish_reason": "stop",
+      "tool_use_events": 52
+    },
+    {
+      "answer_saved": true,
+      "assistant_text_events": 11,
+      "error_events": 0,
+      "finish_reasons": {
+        "stop": 1,
+        "tool-calls": 48
+      },
+      "finished_steps": 49,
+      "stage": "apply",
+      "stdout_sha256": "9b2fa7c513c3d3cf740fa9b9abd3a31416d9774c1c231b69629f24e3967ea36a",
+      "terminal_finish_reason": "stop",
+      "tool_use_events": 78
+    },
+    {
+      "answer_saved": false,
+      "assistant_text_events": 0,
+      "error_events": 0,
+      "finish_reasons": {
+        "tool-calls": 17
+      },
+      "finished_steps": 17,
+      "stage": "review",
+      "stdout_sha256": "0ee6aeb10c5916bbf38bd8b9aff8b1cb410f2c65f4c2f3e005f1f7d70cf6165e",
+      "terminal_finish_reason": "tool-calls",
+      "tool_use_events": 32
+    }
+  ],
+  "status": "failed"
+}

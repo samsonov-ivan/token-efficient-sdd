@@ -1,0 +1,41 @@
+{
+  "accepted": false,
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "baseline_assets_sha256": "bd5d3e928bde7061ff832c543da6924eb152bd4caf735e32eb21416a79aa64d9",
+  "baseline_sha256": "fdedc2156c251d39c6db9d35c7abe990c1c6c62afca3d529c3272e747ad7cdd7",
+  "diagnostic_scope": "post-pipeline attempt audit",
+  "evaluator_request_produced": false,
+  "final_snapshot_produced": false,
+  "kind": "b0-pre-snapshot-review-diagnostic",
+  "manifest_sha256": "f2e9ea12a2e55c39832dcb37d1aa3b24a05000d0080ec95d7d139f00f60ec54a",
+  "pipeline_complete": false,
+  "product_quality_observed": false,
+  "requested_variant": "max",
+  "review_answer_sha256": "728a1e013e53bf7f91e4ad658f76e081c497757174bc438dc493b3bcb92a188c",
+  "review_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "review_stage": {
+    "classification": "no-findings sentinel rejected by blocking-label parser",
+    "findings_label": "BLOCKING: None found.",
+    "input_output_snapshot_equal": true,
+    "round": 1,
+    "runner_error": "Review verdict disagrees with blocking findings",
+    "terminal_verdict": "VERDICT: ACCEPT"
+  },
+  "run_id": "max-f0-first-59bbe10-1-base-a1",
+  "runner_commit": "59bbe10a9ecb3dfde755dee8e1517e2deb228d5b",
+  "stages": [
+    {
+      "answer_saved": true,
+      "stage": "spec"
+    },
+    {
+      "answer_saved": true,
+      "stage": "apply"
+    },
+    {
+      "answer_saved": true,
+      "stage": "review"
+    }
+  ],
+  "status": "failed"
+}

@@ -1,0 +1,86 @@
+{
+  "accepted": false,
+  "apply_stage": {
+    "absolute_path_outside_exact_performer_root": true,
+    "case_only_mismatch": false,
+    "classification": "OpenCode headless turn stopped after correctly denied out-of-worktree edit",
+    "completed_neighbor_tool_event_line": 97,
+    "denied_permission": "external_directory",
+    "denied_tool": "edit",
+    "denied_tool_event_line": 96,
+    "open_code_sources": [
+      "https://github.com/anomalyco/opencode/blob/v1.19.6/packages/opencode/src/cli/cmd/run.ts#L749-L763",
+      "https://github.com/anomalyco/opencode/blob/v1.19.6/packages/opencode/src/session/processor.ts#L188-L190",
+      "https://github.com/anomalyco/opencode/blob/v1.19.6/packages/opencode/src/session/processor.ts#L603-L655"
+    ],
+    "runner_completion_check_rejected_unfinished_stage": true,
+    "runner_error": "No completed model response (finish=tool-calls)",
+    "stderr_sha256": "0b61b933b658c8e14cbc465213927f92cf28d5af39298881fb8944cf812b4c74",
+    "terminal_finish_event_line": 98,
+    "terminal_finish_reason": "tool-calls",
+    "terminal_step_has_text": false
+  },
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "baseline_assets_sha256": "bd5d3e928bde7061ff832c543da6924eb152bd4caf735e32eb21416a79aa64d9",
+  "baseline_sha256": "e7d8c5267547136b90f65904138c6fbd80759e84b1ddf9f17fa5a74ba5fa504e",
+  "diagnostic_scope": "post-pipeline attempt audit",
+  "evaluator_request_produced": false,
+  "final_snapshot_produced": false,
+  "kind": "b0-pre-snapshot-stage-diagnostic",
+  "manifest_sha256": "43ff987cc91fd9b007346acb240c2dbb9e862d55cbfec6b2a8de61db3bda6cc5",
+  "meter_replay": {
+    "allowance": 0.038780150000000006,
+    "apply_model_calls": 26,
+    "billing_source_counts": {
+      "go": 52
+    },
+    "complete": true,
+    "cost": 0,
+    "http_status_counts": {
+      "200": 52
+    },
+    "list_cost": 0.06463357000000002,
+    "model_calls": 52,
+    "reasoning_effort_counts": {
+      "max": 52
+    },
+    "rpt": 2365354
+  },
+  "meter_sha256": "7bfb2731ee1ba63925efa6e82fe7db4e354bdcc0efb1e5a52d4258975a82e340",
+  "pipeline_complete": false,
+  "product_quality_observed": false,
+  "raw_events_sha256": "3bdbc087b6dc0978a71f63d220adf5caa785668f10f134b541a3239d526dc844",
+  "relay_sha256": "4cb04139900da43f5223fef95267ce3c18c9eaf5e2ebd794ba1698002606b0aa",
+  "requested_variant": "max",
+  "review_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "run_id": "max-f0-second-f666fb4-1-base-a1",
+  "runner_commit": "f666fb4290135d87de4ecb8b332ce0ef535daf2a",
+  "stages": [
+    {
+      "answer_saved": true,
+      "error_events": 0,
+      "finish_reasons": {
+        "stop": 1,
+        "tool-calls": 25
+      },
+      "finished_steps": 26,
+      "stage": "spec",
+      "stdout_sha256": "97f6ae7442e38656f7e23da2c286bee12ce0da11a7bbd3aab3d9add0fbd7089d",
+      "terminal_finish_reason": "stop",
+      "tool_use_events": 41
+    },
+    {
+      "answer_saved": false,
+      "error_events": 0,
+      "finish_reasons": {
+        "tool-calls": 26
+      },
+      "finished_steps": 26,
+      "stage": "apply",
+      "stdout_sha256": "c912fc7dc27cb5975b9ddd83bcae84ca90fc2a6b774d5a1381087b21bb7c67b7",
+      "terminal_finish_reason": "tool-calls",
+      "tool_use_events": 43
+    }
+  ],
+  "status": "failed"
+}
