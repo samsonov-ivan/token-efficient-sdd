@@ -1,16 +1,8 @@
 **
 !package.json
 !package-lock.json
-!packages/
-!packages/cli/
 !packages/cli/package.json
-!packages/opencode-plugin/
 !packages/opencode-plugin/package.json
-!bench/
-!bench/repos/
-!bench/repos/minibank/
 !bench/repos/minibank/pyproject.toml
 !bench/repos/minibank/uv.lock
-!tools/
-!tools/runner/
 !tools/runner/Dockerfile
