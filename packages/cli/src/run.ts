@@ -33,6 +33,8 @@ import {
   writeJson,
 } from './harness/io.js';
 import { executeOptimizedReplay, usesOptimizedReplay } from './harness/optimized-replay.js';
+import { executeLiveOptimized, validateLiveOptFlags } from './harness/live-opt.js';
+import { createTaskGate, publicTaskConfig } from './harness/task-gate.js';
 import { flagsFor, parsePlan } from './harness/plan.js';
 import type { Flag, Plan, Slot } from './harness/plan.js';
 import {
@@ -427,8 +429,6 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
     ]);
     writeFileSync(join(runDir, 'openspec-init.log'), init.stdout + init.stderr);
     await checked(Promise.resolve(init));
-    if (!plan.dry && m.mode !== 'baseline')
-      throw new Error('Optimized live executor unavailable before E0');
     const snapshot = async () => {
       const index = join(root, 'tmp', `snapshot-${randomUUID()}.idx`);
       // Use a separate index so a subsequent review sees the original working diff.
@@ -529,7 +529,29 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       m.notes.push('Subscription smoke; no feature implementation or quality acceptance.');
       return;
     }
-    if (plan.dry && m.mode !== 'baseline' && usesOptimizedReplay(m.flags)) {
+    const native = {
+      repo,
+      configDir: env.OPENCODE_CONFIG_DIR,
+      assetsRoot: join(plan.project, 'assets'),
+      runDir,
+      feature: plan.feature,
+      requirement: plan.requirements,
+      model: m.model,
+      invoke,
+      snapshot,
+    };
+    if (!plan.dry && m.mode !== 'baseline') {
+      if (!c) throw new Error('Live optimized tasks require an isolated performer');
+      const config = publicTaskConfig(parse(git(repo, ['show', `${plan.pin}:frugal.yaml`])));
+      await executeLiveOptimized({
+        ...native,
+        flags: m.flags,
+        maxRetries: 1,
+        taskInstructions: (id) =>
+          `Add a substantive public pytest using @pytest.mark.task("${id}") and the applicable scenario marker. The controller runs the marked tests before advancing.`,
+        checkTask: createTaskGate(root, repo, runDir, config, plan.timeout, (argv) => c.exec(argv)),
+      });
+    } else if (plan.dry && m.mode !== 'baseline' && usesOptimizedReplay(m.flags)) {
       await executeOptimizedReplay({
         repo,
         runDir,
@@ -541,17 +563,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
         snapshot,
       });
     } else {
-      await executeBaseline({
-        repo,
-        configDir: env.OPENCODE_CONFIG_DIR,
-        assetsRoot: join(plan.project, 'assets'),
-        runDir,
-        feature: plan.feature,
-        requirement: plan.requirements,
-        model: m.model,
-        invoke,
-        snapshot,
-      });
+      await executeBaseline(native);
     }
     await closeRelay();
     if (compressTools) {
@@ -604,7 +616,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       if (!c) throw new Error('Missing isolation for evaluation');
       if (!compressTools) await c.stop();
       await closeStorage(c, root, runDir);
-      const quality = await evaluate(plan, runDir, m.final_commit, c.image);
+      const quality = await evaluate(plan, runDir, m.final_commit, c.image, m.mode);
       m.gates = quality.gates;
       m.hidden = quality.hidden;
       if (quality.code !== 0)
@@ -669,14 +681,36 @@ export async function run(argv: string[]): Promise<number> {
   const configText = git(join(source, 'repo'), ['show', `${plan.pin}:frugal.yaml`]);
   const config = parse(configText);
   const configHash = digest(configText);
+  let admission: string | null = null;
+  if (!plan.dry && plan.mode !== 'baseline') {
+    validateLiveOptFlags(flagsFor('optimized', config.flags ?? {}, plan.flags));
+    publicTaskConfig(config);
+    if (!plan.cohorts)
+      throw new Error('Live optimized execution requires verified F0/E0 archives via --e0-cohorts');
+    const proof = await checked(
+      command('python3', [
+        join(plan.project, 'analysis/live_eligibility.py'),
+        '--runs',
+        plan.out,
+        '--cohorts',
+        plan.cohorts,
+        '--baseline-hash',
+        assetsHash,
+      ]),
+    );
+    const verified = JSON.parse(proof);
+    if (verified.eligible !== true || verified.baseline_hash !== assetsHash)
+      throw new Error('F0/E0 admission did not confirm this baseline');
+    admission = JSON.stringify(verified);
+  }
   const shared = provenance(plan, assetsHash, configHash, image);
-  const receipt = join(
-    plan.out,
-    '.dry-runs',
-    `${provenance(plan, assetsHash, configHash, null)}.json`,
-  );
+  // Historical B0 receipts keep their filename. Each optimized protocol must
+  // rehearse the same arms, even when its effective flags equal another mode's.
+  const inputsKey = provenance(plan, assetsHash, configHash, null);
+  const receiptKey = plan.mode === 'baseline' ? inputsKey : `${inputsKey}-${plan.mode}`;
+  const receipt = join(plan.out, '.dry-runs', `${receiptKey}.json`);
   if (!plan.dry && !existsSync(receipt))
-    throw new Error('First complete --dry-run for these frozen inputs and requested model');
+    throw new Error('First complete --dry-run for this mode, frozen inputs and requested model');
   if (!plan.dry) {
     const freeze = join(plan.out, '.baseline', 'B0.json');
     if (plan.calibration || existsSync(freeze)) bindInputs(freeze, assetsHash);
@@ -691,6 +725,7 @@ export async function run(argv: string[]): Promise<number> {
         plan.experiment,
         plan.budget,
         plan.goSmoke,
+        ...(admission ? [digest(admission)] : []),
         ...(plan.budgetPlan === plan.experiment ? [] : [plan.budgetPlan]),
       ]),
     ),
@@ -743,6 +778,7 @@ export async function run(argv: string[]): Promise<number> {
       const reservation = mkdtempSync(join(plan.out, '.reservation-'));
       writeJson(join(reservation, 'owner.json'), { pid: process.pid, host: hostname() });
       writeJson(join(reservation, 'manifest.json'), m);
+      if (admission) writeJson(join(reservation, 'live-admission.json'), JSON.parse(admission));
       mkdirSync(join(reservation, 'raw'));
       renameSync(reservation, dir);
       try {
@@ -844,6 +880,7 @@ async function evaluateOnly(argv: string[]): Promise<number> {
       dir,
       m.final_commit,
       m.isolation.image,
+      m.mode,
     );
   }
   const receipt = readJson<Record<string, string>>(join(input, 'inputs.json'));

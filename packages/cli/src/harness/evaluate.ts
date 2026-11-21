@@ -15,7 +15,7 @@ import { parseReport } from '../quality/suites.js';
 import type { Suite } from '../quality/types.js';
 import { digest, git, hashTree, readJson, writeJson } from './io.js';
 import { Container, platformBin, runnerEnvironment, safeFile } from './runner.js';
-import type { Plan } from './plan.js';
+import type { Mode, Plan } from './plan.js';
 import { pytestConfigs, pytestInventory, restorePytestInputs } from './pytest.js';
 
 // Both evaluator workspaces are created only after the last model process exits.
@@ -29,6 +29,7 @@ export async function evaluate(
   runDir: string,
   finalCommit: string,
   image: string,
+  mode: Mode = 'baseline',
 ) {
   if (
     hashTree(plan.oracle) !== plan.oracleHash ||
@@ -55,7 +56,9 @@ export async function evaluate(
   ] as const;
   for (const [revision, kind] of stages) {
     // A previous test process may have modified its checkout. Each invocation starts on the selected Git tree.
-    const root = mkdtempSync(join(realpathSync(tmpdir()), 'frugal-evaluator-'));
+    const root = mkdtempSync(
+      join(realpathSync(process.platform === 'darwin' ? '/tmp' : tmpdir()), 'frugal-evaluator-'),
+    );
     const repo = join(root, 'repo');
     git(root, [
       'clone',
@@ -182,7 +185,7 @@ export async function evaluate(
     suites,
     links: [],
     semantic: [],
-    review: readJson(join(runDir, 'b0/quality-review.json')),
+    review: readJson(join(runDir, mode === 'baseline' ? 'b0' : 'opt', 'quality-review.json')),
   });
 
   // Preserve the exact input that WP-05 and the independent reviewer will inspect offline.

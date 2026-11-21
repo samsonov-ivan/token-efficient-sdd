@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   realpathSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -76,6 +77,20 @@ const budget = {
 };
 
 describe('isolated run lifecycle', () => {
+  it('keeps rehearsal receipts distinct for baseline, optimized and paired runs on the same inputs', async () => {
+    const { args, out } = fixture('{capsule: true}', 'baseline');
+    for (const mode of ['baseline', 'optimized', 'paired']) {
+      const command = [...args];
+      command[command.indexOf('--mode') + 1] = mode;
+      command[command.indexOf('--series') + 1] = mode;
+      expect(await run(command)).toBe(0);
+    }
+    const receipts = readdirSync(join(out, '.dry-runs')).sort();
+    const key = receipts.find((f) => /^[a-f0-9]{64}\.json$/.test(f))?.slice(0, -5);
+    expect(key).toBeTruthy();
+    expect(receipts).toEqual([`${key}-optimized.json`, `${key}-paired.json`, `${key}.json`]);
+  }, 30000);
+
   it('replays A/B for a requested Go model without subscription billing and resumes completed slots', async () => {
     const { out, args, input } = fixture();
     const requestedModel = 'opencode-go/deepseek-v4.1-flash';

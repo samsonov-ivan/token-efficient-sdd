@@ -36,6 +36,7 @@ export function parsePlan(argv: string[]) {
       image: { type: 'string' },
       experiment: { type: 'string' },
       'budget-plan': { type: 'string' },
+      'e0-cohorts': { type: 'string' },
       endpoint: { type: 'string' },
       'context-limit': { type: 'string' },
       'output-limit': { type: 'string' },
@@ -120,6 +121,9 @@ export function parsePlan(argv: string[]) {
       'bench/features',
       'tools/runner',
       'schemas',
+      ...(!dry && mode !== 'baseline'
+        ? ['analysis/live_eligibility.py', 'analysis/e0.py', 'analysis/report.py']
+        : []),
     ])
   )
     throw new Error('Live execution requires committed code, prompts and benchmark inputs');
@@ -204,6 +208,7 @@ export function parsePlan(argv: string[]) {
     out,
     experiment,
     budgetPlan,
+    cohorts: v['e0-cohorts'] ? resolve(v['e0-cohorts']) : null,
     endpoint,
     limits,
     timeout,
@@ -240,11 +245,15 @@ export function parsePlan(argv: string[]) {
 export type Plan = ReturnType<typeof parsePlan>;
 export type Slot = Plan['slots'][number];
 export function flagsFor(mode: Mode, defaults: Record<string, Flag>, selected: string[]) {
-  for (const flag of selected)
-    if (!Object.hasOwn(defaults, flag))
+  const effective = { ...defaults };
+  // The frozen target can predate the controller's task-session flags.
+  for (const flag of selected) {
+    if (flag === 'session_per_task' || flag === 'capsule') effective[flag] ??= false;
+    if (!Object.hasOwn(effective, flag))
       throw new Error(`Unknown optimization flag in target config: ${flag}`);
+  }
   return Object.fromEntries(
-    Object.keys(defaults)
+    Object.keys(effective)
       .sort()
       .map((k) => [
         k,
@@ -252,7 +261,7 @@ export function flagsFor(mode: Mode, defaults: Record<string, Flag>, selected: s
           ? false
           : mode === 'ablation' || selected.length
             ? selected.includes(k)
-            : defaults[k],
+            : effective[k],
       ]),
   );
 }
