@@ -31,11 +31,16 @@ import {
   readJson,
   writeJson,
 } from './harness/io.js';
-import type { Result } from './harness/io.js';
+import { executeOptimizedReplay, usesOptimizedReplay } from './harness/optimized-replay.js';
 import { flagsFor, parsePlan } from './harness/plan.js';
 import type { Flag, Plan, Slot } from './harness/plan.js';
-import { replay } from './harness/replay.js';
-import type { Stage, Invocation } from './harness/replay.js';
+import {
+  invocationStem,
+  type Invocation,
+  replay,
+  type ReplayResult,
+  type Stage,
+} from './harness/replay.js';
 import {
   Container,
   createSettings,
@@ -50,6 +55,7 @@ type StageRecord = {
   stage: Stage;
   session_id: string;
   review_iter?: number;
+  task?: string;
   started_at: string;
   finished_at: string | null;
 };
@@ -235,7 +241,7 @@ function stageWriter(m: Manifest, runDir: string, request: Invocation, start: st
   const path = join(runDir, 'manifest.json');
   const stageFiles = join(runDir, 'raw/stages');
   mkdirSync(stageFiles, { recursive: true });
-  const stem = `${request.stage}-${request.reviewIter ?? 0}`;
+  const stem = invocationStem(request);
   const ids = new Set<string>();
   return {
     line: (line: string, stderr: boolean) => {
@@ -255,6 +261,7 @@ function stageWriter(m: Manifest, runDir: string, request: Invocation, start: st
           stage: request.stage,
           session_id: event.sessionID,
           review_iter: request.reviewIter,
+          task: request.task,
           started_at: start,
           finished_at: null,
         });
@@ -400,11 +407,11 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       git(repo, ['add', '-A'], gitEnv);
       return git(repo, ['write-tree'], gitEnv);
     };
-    const invoke = async (request: Invocation): Promise<Result> => {
+    const invoke = async (request: Invocation): Promise<ReplayResult> => {
       if (interrupted) throw new Error('Interrupted before next stage');
       const writer = stageWriter(m, runDir, request, now());
       if (!request.args.includes('--title')) throw new Error('Missing fixed session title');
-      let result: Result;
+      let result: ReplayResult;
       if (plan.dry && !plan.fixture) {
         result = replay(repo, plan.feature, runDir, m.run_id, request);
         for (const line of result.stdout.trimEnd().split('\n')) writer.line(line, false);
@@ -473,17 +480,30 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       m.notes.push('Subscription smoke; no feature implementation or quality acceptance.');
       return;
     }
-    await executeBaseline({
-      repo,
-      configDir: env.OPENCODE_CONFIG_DIR,
-      assetsRoot: join(plan.project, 'assets'),
-      runDir,
-      feature: plan.feature,
-      requirement: plan.requirements,
-      model: m.model,
-      invoke,
-      snapshot,
-    });
+    if (plan.dry && m.mode !== 'baseline' && usesOptimizedReplay(m.flags)) {
+      await executeOptimizedReplay({
+        repo,
+        runDir,
+        feature: plan.feature,
+        model: m.model,
+        flags: m.flags,
+        baseTree: plan.pin,
+        invoke,
+        snapshot,
+      });
+    } else {
+      await executeBaseline({
+        repo,
+        configDir: env.OPENCODE_CONFIG_DIR,
+        assetsRoot: join(plan.project, 'assets'),
+        runDir,
+        feature: plan.feature,
+        requirement: plan.requirements,
+        model: m.model,
+        invoke,
+        snapshot,
+      });
+    }
     await closeRelay();
     const bundle = join(root, 'tmp', `final-${randomUUID()}.bundle`);
     const finalGit = (args: string[]) =>
