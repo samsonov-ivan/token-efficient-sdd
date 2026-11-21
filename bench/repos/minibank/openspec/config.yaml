@@ -1,0 +1,13 @@
+schema: spec-driven
+context: |
+  Minibank is a local FastAPI service backed by SQLite. Monetary values are
+  integers in minor units. Timestamps are UTC. Preserve existing tests.
+rules:
+  specs:
+    - Start every requirement title with REQ-<AREA>-<NN> and every scenario title with SCN-<AREA>-<NN>.<N>. Reuse the public brief's IDs.
+    - Describe the HTTP result and observable ledger state.
+  design:
+    - Reference the requirement and scenario IDs for every design decision.
+  tasks:
+    - Use the public task IDs. Each task must cite its REQ and SCN IDs and add or exercise a test for the behavior.
+    - Mark each pytest test with @pytest.mark.task("1.1") and @pytest.mark.req("SCN-AREA-01.1") using the actual IDs.
