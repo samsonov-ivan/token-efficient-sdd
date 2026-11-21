@@ -8,6 +8,18 @@ import type { Change, MissingId, SpecRequirement, SpecTask } from './types.js';
 export const requirementPattern = /\bREQ-[A-Z][A-Z0-9-]*-\d+\b/g;
 export const scenarioPattern = /\bSCN-[A-Z][A-Z0-9-]*-\d+\.\d+\b/g;
 const label = (text: string, pattern: RegExp) => (text?.match(pattern) ?? [])[0];
+
+interface OpenSpecRequirement {
+  name: string;
+  text: string;
+  scenarios: { name: string; rawText: string }[];
+}
+
+type OpenSpecDelta = { spec: string } & (
+  | { operation: 'RENAMED'; rename: { from: string; to: string } }
+  | { operation: 'ADDED' | 'MODIFIED' | 'REMOVED'; requirement: OpenSpecRequirement }
+);
+
 export function readChange(
   snapshot: Snapshot,
   id: string,
@@ -96,42 +108,61 @@ export function readChange(
     const change = spec(['show', id, '--type', 'change', '--json']);
     if (!Array.isArray(change.deltas) || !change.deltas.length)
       throw new Error('OpenSpec emitted no deltas');
-    const base = new Map<string, Map<string, { name: string; scenarios: { name: string }[] }>>();
+    const deltas: OpenSpecDelta[] = change.deltas;
+    const base = new Map<string, Map<string, OpenSpecRequirement>>();
+    const renamed = new Map<string, Map<string, OpenSpecRequirement>>();
     const replacedNames = new Map<string, Set<string>>();
     const readBase = (capability: string) => {
-      if (!base.has(capability)) {
-        const model = spec(['show', capability, '--type', 'spec', '--json']);
-        base.set(capability, new Map(model.requirements.map((r: { name: string }) => [r.name, r])));
-      }
-      return base.get(capability);
+      const cached = base.get(capability);
+      if (cached) return cached;
+      const model: { requirements: OpenSpecRequirement[] } = spec([
+        'show',
+        capability,
+        '--type',
+        'spec',
+        '--json',
+      ]);
+      const originals = new Map(model.requirements.map((r) => [r.name, r]));
+      base.set(capability, originals);
+      return originals;
     };
-    for (const delta of change.deltas) {
-      const path = snapshot.files.has(flat) ? flat : `${prefix}specs/${delta.spec}/spec.md`;
+    const markReplaced = (capability: string, name: string) => {
+      const names = replacedNames.get(capability) ?? new Set<string>();
+      names.add(name);
+      replacedNames.set(capability, names);
+    };
+    const currentRequirement = (capability: string, name: string) =>
+      renamed.get(capability)?.get(name) ??
+      (replacedNames.get(capability)?.has(name) ? undefined : readBase(capability).get(name));
+    const deltaPath = (capability: string) => {
+      const path = snapshot.files.has(flat) ? flat : `${prefix}specs/${capability}/spec.md`;
       if (!snapshot.files.has(path)) throw new Error(`Delta source is absent: ${path}`);
-      let req = delta.requirement;
-      if (['MODIFIED', 'REMOVED', 'RENAMED'].includes(delta.operation)) {
-        const name = delta.operation === 'RENAMED' ? delta.rename.from : req.name;
-        const original = readBase(delta.spec)?.get(name);
-        if (!replacedNames.has(delta.spec)) replacedNames.set(delta.spec, new Set());
-        replacedNames.get(delta.spec)?.add(name);
-        if (!original) {
-          errors.push(`Unknown base requirement: ${name}`);
-          continue;
-        }
-        if (delta.operation === 'REMOVED') {
-          requirements.push({
-            id: label(name, requirementPattern) ?? name,
-            path,
-            scenarios: [],
-            removed: true,
-          });
-          continue;
-        }
-        if (delta.operation === 'RENAMED') req = { ...original, name: delta.rename.to };
-      } else if (delta.operation !== 'ADDED')
-        throw new Error(`Unsupported delta: ${delta.operation}`);
+      return path;
+    };
+    // The printed delta list puts MODIFIED before RENAMED, but archive resolves renames
+    // before applying other operations. Keep only the final name of each rename.
+    for (const delta of deltas) {
+      if (delta.operation !== 'RENAMED') continue;
+      deltaPath(delta.spec);
+      const { from, to } = delta.rename;
+      const original = currentRequirement(delta.spec, from);
+      if (!original) {
+        errors.push(`Unknown base requirement: ${from}`);
+        continue;
+      }
+      if (currentRequirement(delta.spec, to)) {
+        errors.push(`Rename target already exists: ${to}`);
+        continue;
+      }
+      const names = renamed.get(delta.spec) ?? new Map<string, OpenSpecRequirement>();
+      names.delete(from);
+      names.set(to, { ...original, name: to });
+      renamed.set(delta.spec, names);
+      markReplaced(delta.spec, from);
+    }
+    const recordRequirement = (req: OpenSpecRequirement, path: string) => {
       const reqId = identify('requirement', path, req.name, label(req.name, requirementPattern));
-      const scns = req.scenarios.map((s: { name: string }) =>
+      const scns = req.scenarios.map((s) =>
         identify('scenario', path, s.name, label(s.name, scenarioPattern), req.name),
       );
       if (!scns.length) errors.push(`Requirement without scenarios: ${reqId}`);
@@ -141,13 +172,37 @@ export function readChange(
         scenarios: scns,
         statement: req.text,
         scenario_text: Object.fromEntries(
-          req.scenarios.map((s: { name: string; rawText: string }) => [
-            label(s.name, scenarioPattern) ?? s.name,
-            s.rawText,
-          ]),
+          req.scenarios.map((s) => [label(s.name, scenarioPattern) ?? s.name, s.rawText]),
         ),
       });
+    };
+    for (const delta of deltas) {
+      const { operation } = delta;
+      if (operation === 'RENAMED') continue;
+      const path = deltaPath(delta.spec);
+      const req = delta.requirement;
+      if (operation === 'MODIFIED' || operation === 'REMOVED') {
+        const original = currentRequirement(delta.spec, req.name);
+        if (!original) {
+          errors.push(`Unknown base requirement: ${req.name}`);
+          continue;
+        }
+        markReplaced(delta.spec, req.name);
+        renamed.get(delta.spec)?.delete(req.name);
+        if (operation === 'REMOVED') {
+          requirements.push({
+            id: label(req.name, requirementPattern) ?? req.name,
+            path,
+            scenarios: [],
+            removed: true,
+          });
+          continue;
+        }
+      } else if (operation !== 'ADDED') throw new Error(`Unsupported delta: ${operation}`);
+      recordRequirement(req, path);
     }
+    for (const [capability, names] of renamed)
+      for (const req of names.values()) recordRequirement(req, deltaPath(capability));
     if (snapshot.files.has(flat)) {
       const original = snapshot.read(flat);
       const reqIds = [...original.matchAll(/^###\s*Requirement:\s*(.*)$/gim)].flatMap(
@@ -198,7 +253,7 @@ export function readChange(
       for (const path of snapshot.files.keys()) {
         const cap = /^openspec\/specs\/(.+)\/spec\.md$/.exec(path)?.[1];
         if (!cap) continue;
-        for (const req of readBase(cap)?.values() ?? []) {
+        for (const req of readBase(cap).values()) {
           if (replacedNames.get(cap)?.has(req.name)) continue;
           for (const id of req.name.match(requirementPattern) ?? []) baseRefs.add(id);
           for (const scn of req.scenarios)

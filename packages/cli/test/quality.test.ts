@@ -33,7 +33,13 @@ const roots: string[] = [];
 afterAll(() => {
   for (const root of roots) rmSync(root, { recursive: true, force: true });
 });
-function fixture(flat = false, testBody = testSource, designBound = 'inclusive', labels = true) {
+function fixture(
+  flat = false,
+  testBody = testSource,
+  designBound = 'inclusive',
+  labels = true,
+  specs?: { delta: string; base: string; extraRefs?: string[] },
+) {
   const root = mkdtempSync(join(tmpdir(), 'frugal-guard-fixture-'));
   roots.push(root);
   const repo = join(root, 'repo');
@@ -53,13 +59,15 @@ function fixture(flat = false, testBody = testSource, designBound = 'inclusive',
   );
   set(
     `${folder}tasks.md`,
-    `## 1. API\n\n- [x] ${labels ? '1.1 ' : ''}Implement the inclusive endpoint${labels ? ` [${req}, ${scn}]` : ''}\n`,
+    `## 1. API\n\n- [x] ${labels ? '1.1 ' : ''}Implement the inclusive endpoint${labels ? ` [${[req, scn, ...(specs?.extraRefs ?? [])].join(', ')}]` : ''}\n`,
   );
   set(
     folder + (flat ? 'specs.md' : 'specs/range/spec.md'),
-    (flat ? '' : '## ADDED Requirements\n\n') +
-      (labels ? requirement : requirement.replace(`${req} `, '').replace(`${scn} `, '')),
+    specs?.delta ??
+      (flat ? '' : '## ADDED Requirements\n\n') +
+        (labels ? requirement : requirement.replace(`${req} `, '').replace(`${scn} `, '')),
   );
+  if (specs) set('openspec/specs/range/spec.md', specs.base);
   set('app/range.py', goodSource);
   set('tests/test_range.py', testBody);
   const git = (args: string[]) =>
@@ -125,6 +133,91 @@ function fixture(flat = false, testBody = testSource, designBound = 'inclusive',
   };
   return { root, repo, snapshot, read, evidence };
 }
+
+describe('OpenSpec renames in the consistency gate', () => {
+  const oldName = 'REQ-RANGE-09 Previous endpoint';
+  const intermediate = 'REQ-RANGE-08 Temporary endpoint';
+  const newName = `${req} Inclusive endpoint`;
+  const second = 'SCN-RANGE-01.2';
+  const secondScenario = `\n#### Scenario: ${second} Out of range\n- **WHEN** the value is 11\n- **THEN** the service rejects it.\n`;
+  const base = `# Range\n\n## Purpose\nDefines which numeric endpoint values the range API accepts.\n\n## Requirements\n\n${requirement
+    .replace(newName, oldName)
+    .replace('The client SHALL accept 10.', 'The server SHALL accept 10.')}${secondScenario}`;
+  const rename = (from: string, to: string) =>
+    `- FROM: \`### Requirement: ${from}\`\n- TO: \`### Requirement: ${to}\`\n`;
+  const delta = (directives: string, modified = requirement + secondScenario) =>
+    `## RENAMED Requirements\n\n${directives}\n## MODIFIED Requirements\n\n${modified}`;
+  const checked = structuredClone(expected);
+  checked.requirements[0].scenarios.push({ id: second, description: '11 is rejected.' });
+
+  it.each([
+    ['direct', rename(oldName, newName)],
+    ['chained', rename(oldName, intermediate) + rename(intermediate, newName)],
+  ])('emits the effective requirement once after a %s rename and modification', (_, directives) => {
+    const f = fixture(false, testSource, 'inclusive', true, {
+      base,
+      delta: delta(directives),
+      extraRefs: [second],
+    });
+    const result = f.read();
+    expect(result.requirements).toHaveLength(1);
+    expect(result.requirements[0]).toMatchObject({
+      id: req,
+      scenarios: [scn, second],
+      statement: 'The client SHALL accept 10. The upper endpoint SHALL be inclusive.',
+    });
+    expect(result.requirements[0].scenario_text?.[second]).toContain('the service rejects it.');
+    expect(consistencyErrors(result, checked)).toEqual([]);
+  });
+
+  it('does not resolve task references to the renamed-away baseline requirement', () => {
+    const result = fixture(false, testSource, 'inclusive', true, {
+      base,
+      delta: delta(rename(oldName, newName)),
+      extraRefs: [second, 'REQ-RANGE-09'],
+    }).read();
+    expect(result.baseRefs).not.toContain('REQ-RANGE-09');
+    expect(consistencyErrors(result, checked)).toEqual([
+      'Dangling reference REQ-RANGE-09 in task 1.1',
+    ]);
+  });
+
+  it('reports invalid renames and preserves duplicate-ID checks', () => {
+    const unknown = fixture(false, testSource, 'inclusive', true, {
+      base,
+      delta: delta(rename('REQ-RANGE-12 Unknown endpoint', newName)),
+    }).read();
+    expect(unknown.errors).toContain('Unknown base requirement: REQ-RANGE-12 Unknown endpoint');
+
+    const collision = fixture(false, testSource, 'inclusive', true, {
+      base: `${base}\n${requirement}`,
+      delta: delta(rename(oldName, newName)),
+    }).read();
+    expect(collision.errors).toContain(`Rename target already exists: ${newName}`);
+
+    const duplicate = fixture(false, testSource, 'inclusive', true, {
+      base,
+      delta:
+        delta(rename(oldName, newName)) +
+        `\n## ADDED Requirements\n\n### Requirement: ${req} Another endpoint\nThe service SHALL accept 5.\n\n#### Scenario: SCN-RANGE-01.3 Lower endpoint\n- **WHEN** the value is 5\n- **THEN** the service accepts it.\n`,
+      extraRefs: [second, 'SCN-RANGE-01.3'],
+    }).read();
+    expect(consistencyErrors(duplicate, checked)).toContain(`Duplicate ID: ${req}`);
+  });
+
+  it('retains strict validation of duplicate delta names and omitted scenarios', () => {
+    for (const [modified, error] of [
+      [`${requirement}${secondScenario}\n${requirement}${secondScenario}`, /Duplicate requirement/],
+      [requirement, /omits scenario/],
+    ] as const) {
+      const f = fixture(false, testSource, 'inclusive', true, {
+        base,
+        delta: delta(rename(oldName, newName), modified),
+      });
+      expect(f.read).toThrow(error);
+    }
+  });
+});
 
 describe('final snapshot quality', () => {
   let f: ReturnType<typeof fixture>;
