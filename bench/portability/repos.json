@@ -1,0 +1,16 @@
+{
+  "google-uuid": {
+    "url": "https://github.com/google/uuid.git",
+    "commit": "0f11ee6918f41a04c201eceeadf612a377bc7fbc",
+    "license": "BSD-3-Clause",
+    "licenseFile": "LICENSE",
+    "test": ["go", "test", "-count=1", "-json", "./..."]
+  },
+  "yocto-queue": {
+    "url": "https://github.com/sindresorhus/yocto-queue.git",
+    "commit": "72a8fa96a9d389765cdf2bb9c6daba8302fc375d",
+    "license": "MIT",
+    "licenseFile": "license",
+    "test": ["npm", "test"]
+  }
+}

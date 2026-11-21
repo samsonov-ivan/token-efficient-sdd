@@ -1,0 +1,97 @@
+{
+  "id": "yocto-queue",
+  "url": "https://github.com/sindresorhus/yocto-queue.git",
+  "commit": "72a8fa96a9d389765cdf2bb9c6daba8302fc375d",
+  "license": "MIT",
+  "licenseFile": "license",
+  "test": [
+    "npm",
+    "test"
+  ],
+  "node": "v24.15.0",
+  "checks": [
+    {
+      "command": [
+        "git",
+        "init",
+        "-q"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "git",
+        "fetch",
+        "--quiet",
+        "--depth=1",
+        "/private/tmp/frugal-1121-platform-yocto",
+        "72a8fa96a9d389765cdf2bb9c6daba8302fc375d"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "git",
+        "checkout",
+        "--quiet",
+        "--detach",
+        "FETCH_HEAD"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "npm",
+        "--version"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "npm",
+        "ci",
+        "--package-lock=true",
+        "--ignore-scripts",
+        "--no-fund",
+        "--no-audit"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import Queue from './index.js'; if ('peekLast' in Queue.prototype) process.exit(1);"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "npm",
+        "test"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "git",
+        "status",
+        "--porcelain=v1"
+      ],
+      "exit": 0
+    }
+  ],
+  "passed": true,
+  "licenseSha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+  "lockSha256": "a25eecbb6384dd6cbb4b74139d4c9dba45804147d7693248c2745a3a602bde58",
+  "npm": "11.12.1"
+}
