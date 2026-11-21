@@ -147,9 +147,9 @@ function initial(
     isolation: { engine: image ? 'docker' : 'offline-replay', image, root: null as string | null },
     metering: {
       title_disabled: true,
-      relay_required: plan.go && (!plan.dry || !!plan.fixture),
-      allowed_billing_sources: plan.go ? ['go', 'go-plus'] : undefined,
-      max_balance_charge: plan.go ? 0 : undefined,
+      relay_required: plan.goRelay,
+      allowed_billing_sources: plan.goRelay ? ['go', 'go-plus'] : undefined,
+      max_balance_charge: plan.goRelay ? 0 : undefined,
       plugin_sha256: null as string | null,
     },
     accepted: false,
@@ -265,7 +265,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       await active.close();
     }
   };
-  if (plan.go && (!plan.dry || plan.fixture)) {
+  if (plan.goRelay) {
     const info = plan.fixture
       ? {
           model: m.model,
@@ -411,7 +411,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       if (interrupted) throw new Error('Interrupted during stage');
       return result;
     };
-    if (plan.goSmoke && (!plan.dry || plan.fixture)) {
+    if (plan.goSmoke && plan.goRelay) {
       const r = await invoke({
         stage: 'verify',
         args: [

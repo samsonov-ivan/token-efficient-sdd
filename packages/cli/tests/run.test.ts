@@ -53,8 +53,10 @@ function fixture() {
   return { project, out, args, input };
 }
 describe('isolated run lifecycle', () => {
-  it('replays A/B on distinct checkouts with external evidence, reconciles both ledgers and resumes completed slots', async () => {
+  it('replays A/B for a requested Go model without subscription billing and resumes completed slots', async () => {
     const { out, args, input } = fixture();
+    const requestedModel = 'opencode-go/deepseek-v4.1-flash';
+    args.push('--model', requestedModel);
     expect(await run(args)).toBe(0);
     const a = join(out, 'test-1-base-a1'),
       b = join(out, 'test-1-opt-a1');
@@ -85,6 +87,13 @@ describe('isolated run lifecycle', () => {
       const meter = readJson<{ known_rpt: number; complete: boolean }>(join(dir, 'meter.json'));
       expect(meter.complete).toBe(true);
       const manifest = readJson<RunManifest>(join(dir, 'manifest.json'));
+      expect(manifest).toMatchObject({
+        model: 'mock/replay',
+        requested_model: requestedModel,
+        metering: { relay_required: false },
+      });
+      expect(manifest.metering.allowed_billing_sources).toBeUndefined();
+      expect(manifest.metering.max_balance_charge).toBeUndefined();
       expect(manifest.stages.map((s) => s.stage)).toEqual(['spec', 'apply', 'review', 'verify']);
       expect(existsSync(join(dir, 'final.bundle'))).toBe(true);
     }
