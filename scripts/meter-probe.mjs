@@ -17,7 +17,7 @@ const [probeArg, destArg] = process.argv.slice(2);
 assert(probeArg && destArg, 'Usage: node scripts/meter-probe.mjs <probe-root> <new-run-dir>');
 const probe = resolve(probeArg),
   dest = resolve(destArg),
-  evidence = join(probe, 'evidence');
+  evidence = existsSync(join(probe, 'summary.json')) ? probe : join(probe, 'evidence');
 assert(
   !existsSync(dest),
   'Choose a new destination. Use frugal meter to recalculate an existing snapshot.',
@@ -35,16 +35,57 @@ for (const [from, to] of [
   ['v1-export.stdout', 'export.json'],
   ['v1-stats.stdout', 'stats.txt'],
   ['mock-requests.json', 'observed-requests.json'],
+  ['provider-response.sse', 'provider-response.sse'],
 ]) {
   if (existsSync(join(evidence, from))) copyFileSync(join(evidence, from), join(raw, to));
 }
 // A SQLite backup incorporates committed pages in a WAL. The original source remains read-only.
 execFileSync(
   'sqlite3',
-  ['-readonly', join(probe, 'v1/data/opencode/opencode.db'), '.backup opencode.db'],
+  [
+    '-readonly',
+    existsSync(join(evidence, 'opencode.db'))
+      ? join(evidence, 'opencode.db')
+      : join(probe, 'v1/data/opencode/opencode.db'),
+    '.backup opencode.db',
+  ],
   { cwd: raw, stdio: 'pipe' },
 );
 const dry_run = summary.mode === 'mock';
+let endpointUsage = null;
+if (existsSync(join(raw, 'provider-response.sse'))) {
+  const chunks = readFileSync(join(raw, 'provider-response.sse'), 'utf8')
+    .split('\n')
+    .filter((line) => line.startsWith('data: {'))
+    .map((line) => JSON.parse(line.slice(6)));
+  const finishes = readFileSync(join(raw, 'events.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .filter((e) => e.type === 'step_finish');
+  const usageChunks = chunks.filter((c) => c.usage);
+  // A dedicated single-request relay captured exactly one response and a single opencode step.
+  assert.equal(new Set(chunks.map((c) => c.id)).size, 1);
+  assert.equal(usageChunks.length, 1);
+  assert.equal(finishes.length, 1);
+  const endpoint = usageChunks[0],
+    step = finishes[0];
+  assert.equal(step.sessionID, session);
+  assert.equal(model.slice(model.indexOf('/') + 1), endpoint.model);
+  endpointUsage = endpoint.usage;
+  const request = {
+    request_id: endpoint.id,
+    source_schema: 'openai-chat',
+    usage: endpointUsage,
+    model_id: endpoint.model,
+    provider_id: model.split('/')[0],
+    session_id: session,
+    message_id: step.part.messageID,
+    part_id: step.part.id,
+    ts: step.timestamp,
+  };
+  writeFileSync(join(raw, 'provider.jsonl'), JSON.stringify(request) + '\n');
+}
 const stages = [
   { stage: 'other', session_id: session, started_at: summary.started, finished_at: summary.ended },
 ];
@@ -78,7 +119,9 @@ assert(displayed, 'Missing opencode stats average');
 const exact = /^\d+$/.test(displayed) ? Number(displayed) : null;
 const observed = dry_run
   ? JSON.parse(readFileSync(join(raw, 'observed-requests.json'), 'utf8')).length
-  : null;
+  : endpointUsage
+    ? 1
+    : null;
 const matched =
   totals.complete &&
   totals.call_count === 1 &&
@@ -86,10 +129,21 @@ const matched =
   (observed === null || observed === totals.call_count);
 const reconciliation = {
   run_id: manifest.run_id,
-  source_files: ['raw/events.jsonl', 'raw/opencode.db', 'raw/export.json', 'raw/stats.txt'],
+  source_files: [
+    'raw/events.jsonl',
+    'raw/opencode.db',
+    'raw/export.json',
+    'raw/stats.txt',
+    ...(endpointUsage ? ['raw/provider-response.sse', 'raw/provider.jsonl'] : []),
+  ],
   stats_displayed_average: displayed,
   stats_exact_average: exact,
   provider_requests_observed: observed,
+  provider_rpt: endpointUsage?.total_tokens ?? null,
+  relative_discrepancy:
+    endpointUsage && totals.rpt !== null
+      ? Math.abs(totals.rpt - endpointUsage.total_tokens) / endpointUsage.total_tokens
+      : null,
   coverage: totals.coverage,
   meter_rpt: totals.rpt,
   matched,
