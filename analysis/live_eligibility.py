@@ -143,12 +143,17 @@ def eligibility(runs, declaration, baseline_hash):
             m = a.manifest
             if m["feature_id"] != PRIMARY or m["baseline_hash"] != baseline_hash:
                 raise Ineligible(f"{a.path.name}: другая основная фича или B0.")
-            inputs = (m["repo"], m["requirements_hash"])
+            inputs = (
+                m["repo"],
+                m["requirements_hash"],
+                m["expected_hash"],
+                m["test_oracle_hash"],
+            )
             if feature_inputs is None:
                 feature_inputs = inputs
             if inputs != feature_inputs:
                 raise Ineligible(
-                    f"{a.path.name}: расходится репозиторий или требование."
+                    f"{a.path.name}: расходятся репозиторий, требования, эталон или тестовый оракул."
                 )
             item = {
                 "id": a.path.name,

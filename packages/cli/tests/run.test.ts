@@ -25,7 +25,7 @@ const identity = {
   GIT_COMMITTER_NAME: 'Fixture',
   GIT_COMMITTER_EMAIL: 'fixture@localhost',
 };
-function fixture(flags = '{capsule: false}', mode = 'paired') {
+function fixture(flags = '{capsule: false}', mode = 'paired', testCommand = 'pytest') {
   const project = mkdtempSync(join(tmpdir(), 'frugal-harness-test-'));
   const source = join(project, 'source');
   const out = join(project, 'bench/runs');
@@ -39,7 +39,7 @@ function fixture(flags = '{capsule: false}', mode = 'paired') {
   git(source, ['init', '-b', 'main']);
   writeFileSync(
     join(source, 'frugal.yaml'),
-    `version: 1\nprofile: small\nlanguage: python\nflags: ${flags}\ntest: {command: pytest, report: junit}\n`,
+    `version: 1\nprofile: small\nlanguage: python\nflags: ${flags}\ntest: {command: "${testCommand}", report: junit}\n`,
   );
   git(source, ['add', '.']);
   git(source, ['commit', '-m', 'Base'], identity);
@@ -77,6 +77,44 @@ const budget = {
 };
 
 describe('isolated run lifecycle', () => {
+  it('rejects an uncalibrated live pair before starting either performer', async () => {
+    const { project, args, out } = fixture('{}', 'paired', 'python -m pytest -q');
+    const external = mkdtempSync(join(tmpdir(), 'frugal-public-admission-test-'));
+    const qa = join(external, 'example-change', 'hidden_tests');
+    mkdirSync(qa, { recursive: true });
+    writeFileSync(join(qa, 'open_control.txt'), 'Synthetic control for CLI admission tests only');
+    for (const script of ['live_eligibility.py', 'e0.py', 'report.py']) {
+      mkdirSync(join(project, 'analysis'), { recursive: true });
+      cpSync(resolve('analysis', script), join(project, 'analysis', script));
+    }
+    git(project, ['add', 'analysis', 'assets', 'bench/features', 'bench/repos']);
+    git(project, ['commit', '-m', 'Freeze public admission fixture'], identity);
+    const inspect = vi.spyOn(Container, 'imageID').mockResolvedValue(`sha256:${'1'.repeat(64)}`);
+    const launch = vi.spyOn(Container.prototype, 'exec').mockImplementation(() => {
+      throw new Error('Unexpected performer invocation');
+    });
+    try {
+      const common = [
+        ...args.filter((arg) => arg !== '--dry-run'),
+        '--model',
+        'public-test/unused',
+        '--flag',
+        'session_per_task',
+        '--oracle-root',
+        external,
+      ];
+      await expect(run(common)).rejects.toThrow(/--e0-cohorts/);
+      const declaration = join(external, 'declaration.json');
+      writeJson(declaration, { cohorts: {} });
+      await expect(run([...common, '--e0-cohorts', declaration])).rejects.toThrow(/M-M/);
+      expect(launch).not.toHaveBeenCalled();
+      expect(existsSync(out)).toBe(false);
+    } finally {
+      inspect.mockRestore();
+      launch.mockRestore();
+      rmSync(external, { recursive: true, force: true });
+    }
+  });
   it('keeps rehearsal receipts distinct for baseline, optimized and paired runs on the same inputs', async () => {
     const { args, out } = fixture('{capsule: true}', 'baseline');
     for (const mode of ['baseline', 'optimized', 'paired']) {

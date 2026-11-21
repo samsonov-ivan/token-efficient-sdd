@@ -15,6 +15,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { parse } from 'yaml';
 import { executeBaseline, hashBaselineAssets } from './baseline.js';
 import { meterRun } from './meter.js';
+import { analysisPython } from './report.js';
 import { parseArgs } from 'node:util';
 import { gates } from './gates.js';
 import { goCatalog, smokeReceipt, validSubscriptionLedger, verifySmoke } from './harness/go.js';
@@ -688,7 +689,7 @@ export async function run(argv: string[]): Promise<number> {
     if (!plan.cohorts)
       throw new Error('Live optimized execution requires verified F0/E0 archives via --e0-cohorts');
     const proof = await checked(
-      command('python3', [
+      command(analysisPython(plan.project), [
         join(plan.project, 'analysis/live_eligibility.py'),
         '--runs',
         plan.out,

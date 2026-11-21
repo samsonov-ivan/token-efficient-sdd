@@ -129,7 +129,9 @@ def test_gate_freezes_verified_runs_deterministically(archives):
         "incomplete-meter",
         "dry-run",
         "wrong-b0",
-        "different-requirements",
+        "requirements_hash",
+        "expected_hash",
+        "test_oracle_hash",
         "secondary-feature",
     ],
 )
@@ -165,9 +167,9 @@ def test_gate_refuses_without_printing_a_freeze(archives, issue):
     elif issue == "wrong-b0":
         for manifest in root.glob("l*/manifest.json"):
             update(manifest, baseline_hash="d" * 64)
-    elif issue == "different-requirements":
+    elif issue in {"requirements_hash", "expected_hash", "test_oracle_hash"}:
         for manifest in root.glob("l*/manifest.json"):
-            update(manifest, requirements_hash="other")
+            update(manifest, **{issue: "f" * 64})
     elif issue == "secondary-feature":
         for manifest in root.glob("*/manifest.json"):
             update(manifest, feature_id="export-history-csv")
