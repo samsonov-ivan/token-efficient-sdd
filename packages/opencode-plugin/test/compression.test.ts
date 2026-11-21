@@ -1,12 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -38,6 +41,10 @@ function checkArchive(short: string, raw: string) {
   const digest = createHash('sha256').update(raw).digest('hex');
   expect(relative).toBe(`.frugal/logs/${digest}.log`);
   expect(readFileSync(join(root, relative ?? ''))).toEqual(Buffer.from(raw));
+  expect(statSync(join(root, '.frugal')).mode & 0o777).toBe(0o700);
+  expect(statSync(join(root, '.frugal/logs')).mode & 0o777).toBe(0o700);
+  expect(statSync(join(root, '.frugal/logs/.gitignore')).mode & 0o777).toBe(0o600);
+  expect(statSync(join(root, relative ?? '')).mode & 0o777).toBe(0o600);
   expect(Buffer.byteLength(short)).toBeLessThan(Buffer.byteLength(raw));
 }
 
@@ -126,9 +133,9 @@ describe('conservative compression of public runner output', () => {
     writeFileSync(dir, 'already a file');
     expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
     rmSync(dir);
-    mkdirSync(join(dir, 'logs'), { recursive: true });
+    mkdirSync(join(dir, 'logs'), { recursive: true, mode: 0o700 });
     const hash = createHash('sha256').update(pytest).digest('hex');
-    writeFileSync(join(dir, 'logs', `${hash}.log`), 'other bytes');
+    writeFileSync(join(dir, 'logs', `${hash}.log`), 'other bytes', { mode: 0o600 });
     expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
     expect(readFileSync(join(dir, 'logs', `${hash}.log`), 'utf8')).toBe('other bytes');
     expect(readdirSync(join(dir, 'logs')).filter((name) => name.endsWith('.tmp'))).toEqual([]);
@@ -137,8 +144,8 @@ describe('conservative compression of public runner output', () => {
   it('keeps full logs out of a clean Git snapshot and respects pre-existing ignore rules', () => {
     execFileSync('git', ['init', '-q', root]);
     const logs = join(root, '.frugal/logs');
-    mkdirSync(logs, { recursive: true });
-    writeFileSync(join(logs, '.gitignore'), 'custom.rule\n');
+    mkdirSync(logs, { recursive: true, mode: 0o700 });
+    writeFileSync(join(logs, '.gitignore'), 'custom.rule\n', { mode: 0o600 });
     expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
     expect(readFileSync(join(logs, '.gitignore'), 'utf8')).toBe('custom.rule\n');
     rmSync(join(logs, '.gitignore'));
@@ -157,6 +164,59 @@ describe('conservative compression of public runner output', () => {
     expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
     expect(readdirSync(other)).toEqual([]);
   });
+
+  it('leaves the output intact for existing archive directories or ignore files with public permissions', () => {
+    const archiveRoot = join(root, '.frugal');
+    const logs = join(archiveRoot, 'logs');
+    mkdirSync(logs, { recursive: true, mode: 0o700 });
+    chmodSync(archiveRoot, 0o755);
+    expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
+    chmodSync(archiveRoot, 0o700);
+    chmodSync(logs, 0o755);
+    expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
+    expect(readdirSync(logs)).toEqual([]);
+
+    chmodSync(logs, 0o700);
+    const ignore = join(logs, '.gitignore');
+    writeFileSync(ignore, '*\n', { mode: 0o644 });
+    chmodSync(ignore, 0o644);
+    expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
+    expect(readdirSync(logs)).toEqual(['.gitignore']);
+  });
+
+  it('reuses only a private regular single-link file even when its bytes are correct', () => {
+    const log = join(
+      root,
+      '.frugal/logs',
+      `${createHash('sha256').update(pytest).digest('hex')}.log`,
+    );
+    const short = compress(root, 'pytest', pytest, 1);
+    checkArchive(short, pytest);
+    expect(compress(root, 'pytest', pytest, 1)).toBe(short);
+
+    chmodSync(log, 0o644);
+    expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
+    chmodSync(log, 0o600);
+    const other = join(root, 'elsewhere');
+    linkSync(log, other);
+    expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
+    rmSync(log);
+    symlinkSync(other, log);
+    expect(compress(root, 'pytest', pytest, 1)).toBe(pytest);
+  });
+
+  it.each(['FRUGAL_RELAY_TOKEN', 'FRUGAL_PROVIDER_API_KEY', 'OPENAI_API_KEY'])(
+    'leaves the tool result and filesystem unchanged if output contains the injected %s',
+    (key) => {
+      const dummy = 'h03-public-fixture-credential';
+      const raw = pytest.replace('test_first FAILED', `test_first FAILED (${dummy})`);
+      vi.stubEnv(key, dummy);
+      expect(compress(root, 'pytest', raw, 1)).toBe(raw);
+      expect(existsSync(join(root, '.frugal'))).toBe(false);
+      vi.stubEnv(key, '');
+      checkArchive(compress(root, 'pytest', raw, 1), raw);
+    },
+  );
 });
 
 describe('host integration', () => {
