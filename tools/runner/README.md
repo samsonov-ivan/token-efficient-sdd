@@ -30,3 +30,14 @@ node packages/cli/bin/frugal.js run --evaluate-only bench/runs/RUN_ID --evidence
 ```
 
 Если сбор тестовых отчётов прервался, передайте прежний `--oracle-root` при первом вызове. Дополнительно можно передать `--signature FILE --reviewer-key PEM`. Засчитываются только проверенные результаты для сохранённого SHA и полная сверка meter. Проверка сохраняет собственное решение и отметку времени в evaluation/assessments. Модельное время, события и финальный Git bundle исходного плеча доступны отдельно.
+
+## Подписка OpenCode Go
+
+Для `opencode-go/deepseek-v4.1-flash` runner включает отдельный потоковый relay на хосте. Он проверяет официальный каталог моделей через `OPENCODE_API_KEY`, опирается на подтверждённое владельцем состояние Extra Usage в docs/OPENCODE_GO_HANDOFF.md и разрешает только подписочное списание с нулевой суммой из баланса. Поля исходного usage и подтверждение модели находятся в raw/relay.jsonl. Долларовая стоимость по прайсу, расход квоты и списание с денежного баланса имеют разные поля. Ключ Go остаётся у координатора. В контейнер передаётся временный токен локального relay.
+
+```sh
+node --env-file-if-exists=.env packages/cli/bin/frugal.js run --feature add-transfer-limits --mode baseline --model opencode-go/deepseek-v4.1-flash --image frugal-runner:local-24 --dry-run --series go-replay
+node --env-file-if-exists=.env packages/cli/bin/frugal.js run --feature add-transfer-limits --mode baseline --model opencode-go/deepseek-v4.1-flash --image frugal-runner:local-24 --go-smoke --series go-smoke
+```
+
+Сначала выполните репетицию и короткий проверочный вызов, затем запускайте серию с теми же входами и внешним QA-каталогом (при его использовании передавайте одинаковый `--oracle-root` в репетиции и рабочем вызове). Успешный живой smoke фиксирует идентификатор модели, SHA, источник подписочного списания и расход allowance. После ошибки биллинга или 429 очередь останавливается. После сброса квоты нужен новый smoke со свежим именем серии. Для технической проверки настоящего CLI без доступа в Go используйте `--dry-run --go-smoke --relay-fixture http://127.0.0.1:PORT/v1 --image frugal-runner:local-24` и локальный сервер фикстуры. Модельные события такой проверки сохраняют dry_run=true.

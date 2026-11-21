@@ -6,6 +6,7 @@ import type { Result } from './io.js';
 export type ProcessOptions = {
   network?: boolean;
   credentials?: string[];
+  secretEnv?: Record<string, string>;
   onLine?: (line: string, stderr: boolean) => void;
 };
 export function runnerEnvironment(root: string): Record<string, string> {
@@ -41,6 +42,7 @@ export function createSettings(
   model: string,
   endpoint: string | null = null,
   limits: { context: number; output: number } | null = null,
+  relay = false,
 ) {
   writeJson(join(env.XDG_CONFIG_HOME, 'openspec', 'config.json'), {
     profile: 'custom',
@@ -57,9 +59,13 @@ export function createSettings(
           name: providerId,
           options: {
             baseURL: endpoint,
-            apiKey: process.env.FRUGAL_PROVIDER_API_KEY ? '{env:FRUGAL_PROVIDER_API_KEY}' : 'local',
+            apiKey: relay
+              ? '{env:FRUGAL_RELAY_TOKEN}'
+              : process.env.FRUGAL_PROVIDER_API_KEY
+                ? '{env:FRUGAL_PROVIDER_API_KEY}'
+                : 'local',
           },
-          models: { [modelId]: { name: modelId, limit: limits } },
+          models: limits ? { [modelId]: { name: modelId, limit: limits } } : undefined,
         },
       }
     : undefined;
@@ -138,9 +144,16 @@ export class Container {
     }
     for (const [key, value] of Object.entries(this.env)) args.push('--env', `${key}=${value}`);
     for (const key of opts.credentials ?? []) if (process.env[key]) args.push('--env', key);
+    if (opts.network && process.platform === 'linux')
+      args.push('--add-host', 'host.docker.internal:host-gateway');
+    for (const key of Object.keys(opts.secretEnv ?? {})) args.push('--env', key);
     return command('docker', [...args, this.image, ...argv], {
+      env: { ...process.env, ...opts.secretEnv },
       onLine: opts.onLine,
-      secrets: opts.credentials?.map((key) => process.env[key] ?? ''),
+      secrets: [
+        ...(opts.credentials ?? []).map((key) => process.env[key] ?? ''),
+        ...Object.values(opts.secretEnv ?? {}),
+      ],
     });
   }
   async stop() {
