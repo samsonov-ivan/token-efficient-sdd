@@ -7,6 +7,7 @@ import json
 import os
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime
 from math import comb
 from pathlib import Path
 from statistics import median
@@ -420,28 +421,50 @@ def summarize_series(attempts):
     return result
 
 
+def elapsed_seconds(interval):
+    start, end = interval.get("started_at"), interval.get("finished_at")
+    if not isinstance(start, str) or not isinstance(end, str):
+        return None
+    try:
+        duration = (
+            datetime.fromisoformat(end) - datetime.fromisoformat(start)
+        ).total_seconds()
+    except (TypeError, ValueError):
+        return None
+    return duration if duration >= 0 else None
+
+
 def report_baseline(a, out):
     m = a.manifest
     qa = a.qa_receipt
     signed_quality = qa.get("signed_quality", {})
     stage_calls = Counter(stage for _, stage, _ in a.model_calls)
+    durations = defaultdict(list)
+    for interval in m.get("stages", []):
+        durations[interval["stage"]].append(elapsed_seconds(interval))
     stage_order = {stage: i for i, stage in enumerate(STAGE_NAMES)}
     stages = sorted(
         a.stages, key=lambda stage: (stage_order.get(stage, len(stage_order)), stage)
     )
     parts = [f"### Живой B0 · {esc_md(a.path.name)}"]
+    elapsed = elapsed_seconds(m)
+    if elapsed is not None:
+        parts.append(f"Длительность прогона по манифесту — {elapsed:.1f} с.")
     if a.meter_ok:
         parts.extend(
             [
                 f"RPT **{a.rpt}**, модельных вызовов **{len(a.model_calls)}**.",
                 table(
-                    ["Стадия", "Вызовы", "RPT", "Доля RPT"],
+                    ["Стадия", "Вызовы", "RPT", "Доля RPT", "Длительность, с"],
                     [
                         [
                             esc_md(STAGE_NAMES.get(stage, stage)),
                             stage_calls[stage],
                             a.stages[stage],
                             f"{a.stages[stage] / a.rpt:.1%}" if a.rpt else "—",
+                            f"{sum(durations[stage]):.1f}"
+                            if durations[stage] and None not in durations[stage]
+                            else "—",
                         ]
                         for stage in stages
                     ],
@@ -495,9 +518,21 @@ def report_baseline(a, out):
         if checks:
             parts.append(f"Гейты, отклонившие итоговый снимок — {checks}.")
         parts.extend(esc_md(defect) for defect in qa.get("public_contract_defects", []))
+        frozen = qa.get("frozen_public_replay")
+        if frozen:
+            parts.append(
+                f"Независимый повтор замороженной регрессии подтвердил "
+                f"{frozen['original_inventory_passed']}/{frozen['original_inventory_total']} исходных тестов. "
+                f"Расширенный отбор включил новые тесты и дал {frozen['passed']}/{frozen['total']}."
+            )
         parts.append(
             f"[Открытая сводка независимой приёмки]({ref(out, a.qa_receipt_path)})"
         )
+        frozen_replay = a.qa_receipt_path.with_name(f"{a.path.name}-frozen-replay.json")
+        if frozen_replay.is_file():
+            parts.append(
+                f"[Отдельная перепроверка замороженной регрессии]({ref(out, frozen_replay)})"
+            )
     if a.qa_receipt_error:
         parts.append(a.qa_receipt_error)
     files = (

@@ -170,6 +170,20 @@ def test_live_baseline_shows_stage_spend_and_independent_quality(tmp_path):
         pipeline_complete=True,
         status="failed",
         accepted=False,
+        started_at="2026-11-21T12:00:00Z",
+        finished_at="2026-11-21T12:00:11Z",
+        stages=[
+            {
+                "stage": "spec",
+                "started_at": "2026-11-21T12:00:01Z",
+                "finished_at": "2026-11-21T12:00:03Z",
+            },
+            {
+                "stage": "spec",
+                "started_at": "2026-11-21T12:00:09Z",
+                "finished_at": "2026-11-21T12:00:10Z",
+            },
+        ],
         gates={
             "suites": {
                 "public": {"passed": 126, "total": 126},
@@ -182,7 +196,8 @@ def test_live_baseline_shows_stage_spend_and_independent_quality(tmp_path):
     out = tmp_path / "output"
     report.write_report(root, out)
     contents = (out / "REPORT.md").read_text()
-    assert "| Спецификация | 1 | 100 | 100.0% |" in contents
+    assert "Длительность прогона по манифесту — 11.0 с." in contents
+    assert "| Спецификация | 1 | 100 | 100.0% | 3.0 |" in contents
     assert (
         "Автоматические гейты · ожидают независимой оценки | 126/126 | 29/30 | 1 |"
         in contents
@@ -203,6 +218,12 @@ def test_live_baseline_shows_stage_spend_and_independent_quality(tmp_path):
             },
             "review_rounds": 1,
             "public_contract_defects": ["SCN-LIM-05.3: incorrect pagination"],
+            "frozen_public_replay": {
+                "original_inventory_passed": 68,
+                "original_inventory_total": 68,
+                "passed": 68,
+                "total": 70,
+            },
         },
     )
     report.write_report(root, out)
@@ -216,6 +237,10 @@ def test_live_baseline_shows_stage_spend_and_independent_quality(tmp_path):
         in contents
     )
     assert "SCN-LIM-05.3" in contents
+    assert (
+        "68/68 исходных тестов. Расширенный отбор включил новые тесты и дал 68/70."
+        in contents
+    )
     assert "../runs/summary/live-base-quality.json" in contents
     assert (
         '<a href="../runs/summary/live-base-quality.json">Независимая приёмка · снимок отклонён</a>'

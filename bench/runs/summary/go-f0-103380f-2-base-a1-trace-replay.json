@@ -1,0 +1,49 @@
+{
+  "assessment_sha256": "462552c78abf9dffc84b46013cd3970cd9c937164a99146d923e233d142735ee",
+  "final_commit": "8e487fa711920199c914c8e60682bc7c37b03ae9",
+  "gate_passed": false,
+  "kind": "post-pipeline-trace-guard-replay",
+  "metrics_after": {
+    "Cons": 0,
+    "Cov_expected": 0.8333333333333334,
+    "Cov_req": 1,
+    "Cov_scn": 1,
+    "Cov_task": 1,
+    "Green": 1,
+    "Q_hidden": 0.9666666666666667,
+    "R": 1
+  },
+  "metrics_before": {
+    "Cons": 0,
+    "Cov_expected": 0.8333333333333334,
+    "Cov_req": 0.6666666666666666,
+    "Cov_scn": 0.8333333333333334,
+    "Cov_task": 0.9090909090909091,
+    "Green": 1,
+    "Q_hidden": 0.9666666666666667,
+    "R": 1
+  },
+  "original_guard_commit": "103380f35328f66d650c0e5d8fc150a9acb4a2a1",
+  "original_summary_sha256": "17846327c0ac104385eae9c7c42c80ddc68cfddcf998e14ea6af47e6d46499bc",
+  "patched_gates_sha256": "e93f99d0d8ee2a754da32ccf500cd806b2741e11996a7d118ed989fd18ece4c5",
+  "patched_guard_commit": "628bd3e9dee46bb332ae95eb16d2b4bbf19e1b64",
+  "patched_trace_sha256": "f9edaf4fbfb441238d6c375cfaaf2c8794a62b4a5c06e35dd7fe54e2c7e68103",
+  "public_contract_defects": [
+    "SCN-LIM-05.3: SQLite integer overflow prevents returning the empty successful page with unchanged total for a sufficiently large nonnegative offset."
+  ],
+  "remaining_failed_checks": [
+    "semantic"
+  ],
+  "request_sha256": "ee956a86b29ba26f6ee3e3034b53a6c5e30ff913c83b782d9861fb00eea2a48a",
+  "restored_public_scenarios": [
+    "SCN-LIM-03.1",
+    "SCN-LIM-03.3",
+    "SCN-LIM-05.2"
+  ],
+  "reviewer_key_sha256": "7866c9b31f2b66d123b1b36869c5cbaf330a802dbe872f7873bf7cdc18728fe6",
+  "run_id": "go-f0-103380f-2-base-a1",
+  "scope": "offline",
+  "signature_sha256": "32d50c4925503c608ddb9cae0e10cd92e1a767feed96335a17d6a7d8a1b48290",
+  "trace_after": 19,
+  "trace_before": 16
+}

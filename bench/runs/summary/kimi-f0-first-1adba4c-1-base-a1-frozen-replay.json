@@ -1,0 +1,44 @@
+{
+  "baseline_runner_commit": "1adba4c9fc033c1ca1738414f86fb88e6d4f982f",
+  "failed_checks": [
+    "consistency",
+    "semantic",
+    "trace"
+  ],
+  "final_commit": "ccb70f3f125a91e13598ed32c83c418acd79b396",
+  "final_hidden": {
+    "passed": 8,
+    "total": 30
+  },
+  "final_public": {
+    "passed": 109,
+    "total": 109
+  },
+  "kind": "wp03-frozen-regression-replay",
+  "new_frozen": {
+    "accepted": true,
+    "original_nodeids": 68,
+    "passed": 68,
+    "report_sha256": "ba051601608f8caf19dd698a9534d4b92f93394e177a9b4d0f34c63a646f20b0",
+    "total": 68
+  },
+  "old_frozen": {
+    "accepted": false,
+    "passed": 107,
+    "total": 109
+  },
+  "public_contract_defects": [
+    "SCN-LIM-01.1: both default limit profiles differ from the frozen brief; normative numeric defaults were omitted from the produced delta.",
+    "SCN-LIM-03.2: a changed destination absent from the ledger returns account_not_found before a reused key can yield idempotency_conflict.",
+    "SCN-LIM-05.3: valid large offsets cannot return an empty page with unchanged total because SQLite receives the out-of-range integer; malformed history filters are also insufficiently validated."
+  ],
+  "replay_build_commit": "c24be2f8d7e322df2c31993eae8b79a95f7e7526",
+  "request_sha256": "6e66e5655f698d15a7c62ee787d5a0f0aea3ca6b7b295364bf705d62f79c15dc",
+  "run_id": "kimi-f0-first-1adba4c-1-base-a1",
+  "runner_patch_commit": "6962c38555dd0e2e7d30584cd9572d2917846fee",
+  "scope": "offline",
+  "signed_assessment_sha256": "4a6045cc0737099925f0c631df7c1e515d54a800dc605e9e76f5c0901621f1c3",
+  "signed_gate_passed": false,
+  "signed_gates_sha256": "45861e78e0bf9e88446d4acd3dd78194bb54ee3d29b87df2e68aeb2f87334856",
+  "unchanged_bundle_sha256": "1a75078f713c7e250d87e80460259deb638dd06429b9a83d93ca334d8f0cdefb"
+}
