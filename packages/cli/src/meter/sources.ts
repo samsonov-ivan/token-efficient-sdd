@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -278,6 +279,23 @@ async function lines(
     const ref = `${file}#L${lineNumber}`;
     data.checked(ref, () => visit(record(JSON.parse(line)), ref));
   }
+}
+
+export async function sourceHashes(root: string): Promise<Record<string, string>> {
+  const inputs = [
+    ...rawFiles(root, 'raw/events.jsonl', 'raw/events', '.jsonl'),
+    ...rawFiles(root, 'raw/export.json', 'raw/exports', '.json'),
+    ...['raw/opencode.db', 'raw/provider.jsonl', 'raw/opencode.db-wal'].filter((file) =>
+      existsSync(join(root, file)),
+    ),
+  ].sort();
+  const hashes: Record<string, string> = {};
+  for (const file of inputs) {
+    const hash = createHash('sha256');
+    for await (const chunk of createReadStream(join(root, file))) hash.update(chunk);
+    hashes[file] = hash.digest('hex');
+  }
+  return hashes;
 }
 
 export async function collect(root: string) {
