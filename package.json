@@ -12,6 +12,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "demo:handoff": "npm run build --workspace frugal --silent && node scripts/demo-handoff.mjs",
+    "check:handoff": "npm run build --workspace frugal --silent && node scripts/check-handoff.mjs",
     "test": "vitest run",
     "lint": "biome lint packages",
     "format": "biome format --write packages",

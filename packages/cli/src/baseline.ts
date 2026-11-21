@@ -188,7 +188,7 @@ async function checkArtifacts(repo: string, feature: string, applied: boolean) {
   }
 }
 
-function stageReply(result: CommandResult) {
+export function stageReply(result: CommandResult) {
   if (result.code !== 0) throw new Error(`opencode exited with code ${result.code}`);
   if (/falling back to default agent/i.test(result.stderr))
     throw new Error('Requested agent unavailable');

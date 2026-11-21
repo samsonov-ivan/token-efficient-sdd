@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { readJson, writeJson } from '../src/harness/io.js';
+import { executeOptimizedReplay } from '../src/harness/optimized-replay.js';
 import { invocationStem, replay } from '../src/harness/replay.js';
 import { meterRun } from '../src/meter.js';
 
@@ -24,6 +25,32 @@ function fixture() {
   }
   return { dir, apply };
 }
+
+it('requires the completed OpenCode event even when the fixture returns its expected answer', async () => {
+  const { dir } = fixture();
+  await expect(
+    executeOptimizedReplay({
+      repo: dir,
+      runDir: dir,
+      feature: 'fixture',
+      model: 'mock/replay',
+      baseTree: 'unused',
+      flags: { session_per_task: true },
+      snapshot: async () => {
+        throw new Error('Incomplete stage reached snapshot');
+      },
+      async invoke(request) {
+        const result = replay(dir, 'fixture', dir, 'fixture', request);
+        const stdout = result.stdout
+          .trimEnd()
+          .split('\n')
+          .filter((line) => JSON.parse(line).type !== 'step_finish')
+          .join('\n');
+        return { ...result, stdout };
+      },
+    }),
+  ).rejects.toThrow('No completed model response');
+});
 
 it('reconciles a retry, a second task in the same session and a fresh session, all at the same time', async () => {
   const { dir, apply } = fixture();

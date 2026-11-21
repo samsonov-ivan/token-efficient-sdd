@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { stageReply } from '../baseline.js';
 import { runOptimizedReview } from '../review.js';
 import { runTaskSessions } from '../task-sessions.js';
 import { checked, writeJson } from './io.js';
@@ -84,9 +85,9 @@ export async function executeOptimizedReplay(opts: Options) {
       fixture,
     });
     await checked(Promise.resolve(result));
-    if (result.replayAnswer !== fixture.answer || !result.replaySessionId)
-      throw new Error(`Missing replay reply or session for ${stem}`);
-    return { answer: result.replayAnswer, sessionId: result.replaySessionId };
+    const { answer, session } = stageReply(result);
+    if (answer !== fixture.answer) throw new Error(`Unexpected replay reply for ${stem}`);
+    return { answer, sessionId: session };
   };
   const emit = async (
     input: Pick<Invocation, 'stage' | 'reviewIter'>,

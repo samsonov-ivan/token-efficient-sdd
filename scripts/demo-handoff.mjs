@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { stageReply } from '../packages/cli/dist/baseline.js';
 import { replay } from '../packages/cli/dist/harness/replay.js';
 import { runTaskSessions } from '../packages/cli/dist/task-sessions.js';
 
@@ -89,7 +90,8 @@ await runTaskSessions(opts, {
       fixture: taskId === '1.1' ? publishCatalog() : writeReceipt(prompt),
     });
     writeFileSync(join(evidence, `events-${taskId}.jsonl`), result.stdout);
-    return { sessionId: result.replaySessionId, handoff: result.replayAnswer };
+    const { session, answer } = stageReply(result);
+    return { sessionId: session, handoff: answer };
   },
   checkTask,
 });
