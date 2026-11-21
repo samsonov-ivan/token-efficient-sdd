@@ -125,6 +125,16 @@ it('respects the boolean flag before reading change artifacts', () => {
   }
 });
 
+it('accepts the harness effective flag without changing CLI flag semantics', () => {
+  put('frugal.yaml', `flags: {capsule: false}\n${testConfig}`);
+  expect(build).toThrow(/flags.capsule: true/);
+  expect(buildCapsule(root, 'add-range', '1.1', { enabled: true })).toContain(block);
+  put('frugal.yaml', `flags: {capsule: true}\n${testConfig}`);
+  expect(() => buildCapsule(root, 'add-range', '1.1', { enabled: false })).toThrow(
+    /flags.capsule: true/,
+  );
+});
+
 it('rejects path traversal and symlinked artifact ancestors', () => {
   expect(() => buildCapsule(root, '../other', '1.1')).toThrow(/Invalid change ID/);
   rmSync(join(root, dir, 'specs'), { recursive: true });
@@ -132,11 +142,11 @@ it('rejects path traversal and symlinked artifact ancestors', () => {
   expect(build).toThrow(/Symlink in capsule input/);
 });
 
-it('preserves OpenSpec rename directives and the original scenarios, resolving the new ID', () => {
+it('recognizes closing ATX hashes and preserves original requirements and rename directives', () => {
   put('openspec/specs/range/spec.md', block);
   const rename =
-    '- FROM: `### Requirement: REQ-RANGE-01 Endpoint`\n- TO: `### Requirement: REQ-BOUND-01 Bound`';
-  put(path, `## RENAMED Requirements\n${rename}\n`);
+    '- FROM: `### Requirement: REQ-RANGE-01 Endpoint ###`\n- TO: `### Requirement: REQ-BOUND-01 Bound ###`';
+  put(path, `## RENAMED Requirements ##\n${rename}\n`);
   put(`${dir}/tasks.md`, `- [ ] 1.1 Rename [REQ-BOUND-01, ${scn}]\n`);
   expect(build()).toContain(rename);
   expect(build()).toContain(block);
@@ -145,12 +155,44 @@ it('preserves OpenSpec rename directives and the original scenarios, resolving t
   expect(build).toThrow(/Dangling reference REQ-RANGE-01/);
 });
 
-it('honors removed requirement bullets over the previous main spec', () => {
+it('pairs rename and modification for the same requirement, retaining only the current body', () => {
   put('openspec/specs/range/spec.md', block);
-  put(path, `## REMOVED Requirements\n* \`### Requirement: ${req} Endpoint\`\n`);
+  const rename =
+    '- FROM: `### Requirement: REQ-RANGE-01 Endpoint`\n- TO: `### Requirement: REQ-BOUND-01 Bound`';
+  const updated = block
+    .replace(`${req} Endpoint`, 'REQ-BOUND-01 Bound ###')
+    .replace('inclusive upper bound', 'exclusive upper bound');
+  put(path, `## MODIFIED Requirements ##\r\n${updated}## RENAMED Requirements ##\n${rename}\n`);
+  put(`${dir}/tasks.md`, `- [ ] 1.1 Rename and modify [REQ-BOUND-01, ${scn}]\n`);
+  expect(build()).toContain(rename);
+  expect(build()).toContain(updated);
+  expect(build()).not.toContain('inclusive upper bound');
+});
+
+it('retains removal guidance and honors the removal over the previous main spec', () => {
+  put('openspec/specs/range/spec.md', block);
+  const removal = [
+    `* \`### Requirement: ${req} Endpoint\``,
+    '  Reason: The newer endpoint already validates bounds.',
+    '  Migration: Existing clients must switch first.',
+    '',
+  ].join('\r\n');
+  put(
+    path,
+    `## REMOVED Requirements ##\r\n${removal}### Requirement: REQ-OTHER-01 Other\nUnrelated guidance.\n`,
+  );
   put(`${dir}/tasks.md`, `- [ ] 1.1 Remove [${req}]\n`);
   expect(build()).toContain('REMOVED Requirements');
+  expect(build()).toContain(removal);
+  expect(build()).not.toContain('Unrelated guidance.');
   expect(build()).not.toContain('An endpoint SHALL');
   put(`${dir}/tasks.md`, `- [ ] 1.1 Old [${scn}]\n`);
   expect(build).toThrow(/Dangling reference SCN-RANGE-01.1/);
+});
+
+it('keeps a small design verbatim when its top-level heading is the only implicit match', () => {
+  const design =
+    '# Design\n\n## Shared access\nCheck the access policy described by REQ-OTHER-01.\n';
+  put(`${dir}/design.md`, design);
+  expect(build()).toContain(design);
 });

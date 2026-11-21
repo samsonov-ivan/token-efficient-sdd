@@ -10,12 +10,16 @@ interface Heading {
   start: number;
 }
 
-interface Requirement {
+interface RequirementName {
+  id: string;
+  name: string;
+}
+
+interface Requirement extends RequirementName {
   path: string;
   operation: string;
-  id: string;
   scenarios: string[];
-  renamedFrom?: string;
+  renamedFrom?: RequirementName;
   text: string;
 }
 
@@ -41,8 +45,12 @@ function markdownLines(source: string) {
 function headings(source: string): Heading[] {
   return markdownLines(source).flatMap(({ start, text, literal }) => {
     const m = !literal && /^ {0,3}(#{1,6})[ \t]+(.+?)\s*$/.exec(text);
-    return m ? [{ start, depth: m[1].length, title: m[2] }] : [];
+    return m ? [{ start, depth: m[1].length, title: headingTitle(m[2]) }] : [];
   });
+}
+
+function headingTitle(text: string) {
+  return text.replace(/[ \t]+#+[ \t]*$/, '').trim();
 }
 
 function refs(text: string) {
@@ -112,26 +120,37 @@ function readRequirements(root: string, path: string): Requirement[] {
     if (heading.depth === 2 && /^(?:RENAMED|REMOVED) Requirements$/i.test(heading.title)) {
       const end = all.slice(i + 1).find((h) => h.depth <= 2)?.start ?? source.length;
       const section = source.slice(heading.start, end);
+      const lines = markdownLines(section).flatMap((line) => {
+        const match =
+          !line.literal &&
+          /^\s*(?:[-*+]\s+)?(?:(FROM|TO):\s*)?`?###\s*Requirement:\s*(.+?)`?\s*$/i.exec(line.text);
+        if (!match) return [];
+        const name = headingTitle(match[2]);
+        const id = name.match(requirementPattern)?.[0];
+        return id ? [{ ...line, id, name, side: match[1]?.toUpperCase() }] : [];
+      });
+      if (/^REMOVED/i.test(heading.title)) {
+        const removals = lines.filter((line) => !line.side);
+        return removals.map(({ id, name, start }, i) => ({
+          path,
+          id,
+          name,
+          scenarios: [],
+          text: section.slice(start, removals[i + 1]?.start ?? section.length),
+          operation: heading.title,
+        }));
+      }
       const directives: Requirement[] = [];
-      let previous: { id: string; start: number } | undefined;
-      for (const line of markdownLines(section)) {
-        if (line.literal) continue;
-        const match = /^\s*(?:[-*+]\s+)?(?:(FROM|TO):\s*)?`?###\s*Requirement:\s*(.+)/i.exec(
-          line.text,
-        );
-        const id = match?.[2].match(requirementPattern)?.[0];
-        if (!id || !match) continue;
-        if (/^REMOVED/i.test(heading.title)) {
-          // Plain removed headings are already indexed by the ordinary block parser.
-          if (/^\s*[-*+]/.test(line.text))
-            directives.push({ path, id, scenarios: [], text: line.text, operation: heading.title });
-        } else if (match[1]?.toUpperCase() === 'FROM' && !previous) {
-          previous = { id, start: line.start };
-        } else if (match[1]?.toUpperCase() === 'TO' && previous) {
+      let previous: (typeof lines)[number] | undefined;
+      for (const line of lines) {
+        if (line.side === 'FROM' && !previous) {
+          previous = line;
+        } else if (line.side === 'TO' && previous) {
           directives.push({
             path,
-            id,
-            renamedFrom: previous.id,
+            id: line.id,
+            name: line.name,
+            renamedFrom: { id: previous.id, name: previous.name },
             scenarios: [],
             operation: heading.title,
             text: section.slice(previous.start, line.start + line.text.length),
@@ -143,21 +162,23 @@ function readRequirements(root: string, path: string): Requirement[] {
       return directives;
     }
     if (heading.depth !== 3 || !/^Requirement:\s*/i.test(heading.title)) return [];
-    const id = heading.title.match(requirementPattern)?.[0];
+    const name = heading.title.replace(/^Requirement:\s*/i, '');
+    const id = name.match(requirementPattern)?.[0];
     if (!id) return [];
+    const group = all
+      .slice(0, i)
+      .reverse()
+      .find((h) => h.depth <= 2);
+    const operation = group?.depth === 2 ? group.title : '';
+    if (/^(?:REMOVED|RENAMED) Requirements$/i.test(operation)) return [];
     const end =
       all.slice(i + 1).find((h) => h.depth < 3 || (h.depth === 3 && /^Requirement:/i.test(h.title)))
         ?.start ?? source.length;
-    const operation =
-      all
-        .slice(0, i)
-        .reverse()
-        .find((h) => h.depth === 2)?.title ?? '';
     const scenarios = all
       .slice(i + 1)
       .filter((h) => h.start < end && h.depth === 4 && /^Scenario:/i.test(h.title))
       .flatMap((h) => h.title.match(scenarioPattern)?.slice(0, 1) ?? []);
-    return [{ path, operation, id, scenarios, text: source.slice(heading.start, end) }];
+    return [{ path, operation, id, name, scenarios, text: source.slice(heading.start, end) }];
   });
 }
 
@@ -170,28 +191,45 @@ function relatedRequirements(root: string, change: string, task: string, taskPat
   if (entry(root, flat) && native.length)
     throw new Error(`Conflicting flat and native specs in ${change}`);
   const paths = native.length ? native : [flat];
-  const changed = paths.flatMap((path) => readRequirements(root, path));
+  const deltas = paths.flatMap((path) => readRequirements(root, path));
   const matches = (r: Requirement, id: string) => r.id === id || r.scenarios.includes(id);
   let base: Requirement[] | undefined;
   const baseRequirements = () => {
     base ??= specFiles(root, 'openspec/specs').flatMap((path) => readRequirements(root, path));
     return base;
   };
-  for (const r of changed) {
-    if (!r.renamedFrom) continue;
+  const combined = new Set<Requirement>();
+  for (const r of deltas) {
+    const from = r.renamedFrom;
+    if (!from) continue;
     const basePath = r.path.startsWith(`${change}/specs/`) ? r.path.slice(change.length + 1) : null;
     const originals = baseRequirements().filter(
       (original) =>
-        original.id === r.renamedFrom && (!basePath || original.path === `openspec/${basePath}`),
+        original.name === from.name && (!basePath || original.path === `openspec/${basePath}`),
     );
     if (originals.length !== 1)
       throw new Error(
-        `Expected one source requirement for rename of ${r.renamedFrom} in ${r.path}, found ${originals.length}`,
+        `Expected one source requirement for rename of ${from.id} in ${r.path}, found ${originals.length}`,
       );
+    const modifications = deltas.filter(
+      (delta) =>
+        delta.path === r.path &&
+        delta.name === r.name &&
+        /^MODIFIED Requirements$/i.test(delta.operation),
+    );
+    if (modifications.length === 1) {
+      const [modified] = modifications;
+      r.text += `\n\n${modified.text}`;
+      r.operation += ` + ${modified.operation}`;
+      r.scenarios = modified.scenarios;
+      combined.add(modified);
+      continue;
+    }
     const [original] = originals;
     r.text += `\n\nOriginal text: \`${original.path}\`\n\n${original.text}`;
     r.scenarios = original.scenarios;
   }
+  const changed = deltas.filter((delta) => !combined.has(delta));
   const selected = new Set<Requirement>();
   const seen = new Set<string>();
   for (const id of wanted) {
@@ -202,7 +240,7 @@ function relatedRequirements(root: string, change: string, task: string, taskPat
       candidates = baseRequirements().filter(
         (r) =>
           matches(r, id) &&
-          !changed.some((delta) => r.id === delta.id || r.id === delta.renamedFrom),
+          !changed.some((delta) => r.id === delta.id || r.id === delta.renamedFrom?.id),
       );
     }
     if (candidates.length !== 1)
@@ -212,7 +250,7 @@ function relatedRequirements(root: string, change: string, task: string, taskPat
     const [r] = candidates;
     if (selected.has(r)) continue;
     selected.add(r);
-    wanted.push(...refs(r.text).filter((ref) => !matches(r, ref) && ref !== r.renamedFrom));
+    wanted.push(...refs(r.text).filter((ref) => !matches(r, ref) && ref !== r.renamedFrom?.id));
   }
   return [...selected].sort((a, b) =>
     a.path < b.path ? -1 : a.path > b.path ? 1 : a.id < b.id ? -1 : 1,
@@ -229,17 +267,19 @@ function relatedDesign(source: string, task: string, ids: Set<string>) {
   const keep = new Set<number>();
   const ancestors: number[] = [];
   const inScope = new Set<number>();
+  let matched = false;
   for (let i = 0; i < sections.length; i++) {
     const h = sections[i];
     while (ancestors.length && sections[ancestors[ancestors.length - 1]].depth >= h.depth)
       ancestors.pop();
     const text = source.slice(h.start, sections[i + 1]?.start ?? source.length);
     const linked = refs(text);
+    const related = linked.some((ref) => ids.has(ref)) || files.some((file) => text.includes(file));
+    matched ||= related;
     // Unscoped rules can constrain every task (invariants, shared interfaces, errors).
     if (
       (!linked.length && (!ancestors.length || inScope.has(ancestors[ancestors.length - 1]))) ||
-      linked.some((ref) => ids.has(ref)) ||
-      files.some((file) => text.includes(file))
+      related
     ) {
       inScope.add(i);
       keep.add(i);
@@ -247,11 +287,8 @@ function relatedDesign(source: string, task: string, ids: Set<string>) {
     }
     ancestors.push(i);
   }
-  if (!sections.length) return source;
-  if (!keep.size)
-    return source.length <= 4096
-      ? source
-      : 'No matching design section. Read the full design at the path above.';
+  if (!sections.length || (!matched && source.length <= 4096)) return source;
+  if (!keep.size) return 'No matching design section. Read the full design at the path above.';
   return (
     source.slice(0, sections[0].start) +
     sections
@@ -262,11 +299,16 @@ function relatedDesign(source: string, task: string, ids: Set<string>) {
   );
 }
 
-export function buildCapsule(root: string, changeId: string, taskId: string) {
+export function buildCapsule(
+  root: string,
+  changeId: string,
+  taskId: string,
+  options: { enabled?: boolean } = {},
+) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(changeId)) throw new Error(`Invalid change ID: ${changeId}`);
   if (!/^\d+(?:\.\d+)+$/.test(taskId)) throw new Error(`Invalid task ID: ${taskId}`);
   const config = parse(read(root, 'frugal.yaml'));
-  if (config?.flags?.capsule !== true)
+  if ((options.enabled ?? config?.flags?.capsule) !== true)
     throw new Error('Task capsules require flags.capsule: true in frugal.yaml');
   const dir = `openspec/changes/${changeId}`;
   const taskPath = `${dir}/tasks.md`;
