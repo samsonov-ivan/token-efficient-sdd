@@ -1,0 +1,91 @@
+{
+  "id": "google-uuid",
+  "url": "https://github.com/google/uuid.git",
+  "commit": "0f11ee6918f41a04c201eceeadf612a377bc7fbc",
+  "license": "BSD-3-Clause",
+  "licenseFile": "LICENSE",
+  "test": [
+    "go",
+    "test",
+    "-count=1",
+    "-json",
+    "./..."
+  ],
+  "node": "v24.15.0",
+  "checks": [
+    {
+      "command": [
+        "git",
+        "init",
+        "-q"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "git",
+        "fetch",
+        "--quiet",
+        "--depth=1",
+        "/private/tmp/frugal-1121-platform-uuid",
+        "0f11ee6918f41a04c201eceeadf612a377bc7fbc"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "git",
+        "checkout",
+        "--quiet",
+        "--detach",
+        "FETCH_HEAD"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "go",
+        "version"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "go",
+        "doc",
+        "-short",
+        "."
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "-json",
+        "./..."
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "git",
+        "status",
+        "--porcelain=v1"
+      ],
+      "exit": 0
+    }
+  ],
+  "passed": true,
+  "licenseSha256": "0a8d61ed3cbfd5312326e8126c31ce9c627a283adc99131b56896d29ada04b2d",
+  "go": "go version go1.27.4 darwin/arm64"
+}

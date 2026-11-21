@@ -15,7 +15,7 @@ type Command = keyof typeof commands;
 const moduleUsage: Partial<Record<Command, string>> = {
   consistency: '[options]',
   gates: '[options]',
-  meter: '<run-dir>',
+  meter: '<run-dir> [--out <dir>]',
   report: '<runs-dir> [options]',
   run: '--mode <mode> --feature <id> --model <id> [--runs N] [--dry-run]',
   trace: '[options]',
