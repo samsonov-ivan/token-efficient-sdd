@@ -602,7 +602,15 @@ export async function run(argv: string[]): Promise<number> {
   bindInputs(
     join(plan.out, '.series', `${plan.id}.json`),
     digest(
-      JSON.stringify([shared, plan.dry, plan.slots, plan.experiment, plan.budget, plan.goSmoke]),
+      JSON.stringify([
+        shared,
+        plan.dry,
+        plan.slots,
+        plan.experiment,
+        plan.budget,
+        plan.goSmoke,
+        ...(plan.budgetPlan === plan.experiment ? [] : [plan.budgetPlan]),
+      ]),
     ),
   );
   let successful = true;

@@ -35,6 +35,7 @@ export function parsePlan(argv: string[]) {
       flag: { type: 'string', multiple: true },
       image: { type: 'string' },
       experiment: { type: 'string' },
+      'budget-plan': { type: 'string' },
       endpoint: { type: 'string' },
       'context-limit': { type: 'string' },
       'output-limit': { type: 'string' },
@@ -47,8 +48,11 @@ export function parsePlan(argv: string[]) {
   });
   const project = resolve(v.project ?? git(process.cwd(), ['rev-parse', '--show-toplevel']));
   const experiment = v.experiment ? slug(v.experiment, 'experiment') : null;
-  const budget = experiment
-    ? readJson<Budget>(join(project, 'bench/plans', `${experiment}.json`))
+  const budgetPlan =
+    v['budget-plan'] === undefined ? experiment : slug(v['budget-plan'], 'budget plan');
+  if (budgetPlan && !experiment) throw new Error('--budget-plan requires --experiment');
+  const budget = budgetPlan
+    ? readJson<Budget>(join(project, 'bench/plans', `${budgetPlan}.json`))
     : null;
   let endpoint: string | null = null;
   let limits: { context: number; output: number } | null = null;
@@ -199,6 +203,7 @@ export function parsePlan(argv: string[]) {
     project,
     out,
     experiment,
+    budgetPlan,
     endpoint,
     limits,
     timeout,

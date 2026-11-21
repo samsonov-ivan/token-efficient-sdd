@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { git, readJson, writeJson } from '../src/harness/io.js';
-import { flagsFor } from '../src/harness/plan.js';
+import { flagsFor, parsePlan } from '../src/harness/plan.js';
 import { Container } from '../src/harness/runner.js';
 import { type RunManifest, run } from '../src/run.js';
 
@@ -63,6 +63,17 @@ function fixture() {
   ];
   return { project, out, args, input };
 }
+
+const budget = {
+  runs: 3,
+  mode: 'baseline',
+  feature: 'example-change',
+  model: 'example/large',
+  estimated_cost_per_arm: 10,
+  maximum_cost: 40,
+  quota_available: 40,
+};
+
 describe('isolated run lifecycle', () => {
   it('replays A/B for a requested Go model without subscription billing and resumes completed slots', async () => {
     const { out, args, input } = fixture();
@@ -123,6 +134,50 @@ describe('isolated run lifecycle', () => {
     writeFileSync(join(input, 'requirement.md'), 'Changed');
     await expect(run([...args, '--resume'])).rejects.toThrow('Frozen run inputs changed');
   }, 60000);
+  it('selects an E0 budget plan independently of its experiment ID and binds it on resume', async () => {
+    const { project, out } = fixture();
+    const plans = join(project, 'bench/plans');
+    writeJson(join(plans, 'E0.json'), { ...budget, model: 'example/medium' });
+    writeJson(join(plans, 'E0-large.json'), budget);
+    writeJson(join(plans, 'E0-large-copy.json'), budget);
+    const args = ['--project', project, '--experiment', 'E0', '--dry-run'];
+    expect(parsePlan(args)).toMatchObject({
+      calibration: true,
+      requested: 'example/medium',
+      runs: 3,
+    });
+    expect(() => parsePlan([...args, '--budget-plan', '../E0'])).toThrow('Invalid budget plan');
+    expect(() => parsePlan(['--project', project, '--budget-plan', 'E0-large'])).toThrow(
+      '--budget-plan requires --experiment',
+    );
+
+    const series = [...args, '--runs', '1', '--series', 'test'];
+    const large = [...series, '--budget-plan', 'E0-large'];
+    expect(await run(large)).toBe(0);
+    expect(readJson<RunManifest>(join(out, 'test-1-base-a1/manifest.json'))).toMatchObject({
+      experiment: 'E0',
+      requested_model: 'example/large',
+      status: 'complete',
+    });
+    expect(await run([...large, '--resume'])).toBe(0);
+    await expect(run([...series, '--budget-plan', 'E0-large-copy', '--resume'])).rejects.toThrow(
+      'Frozen run inputs changed',
+    );
+  }, 60000);
+  it('checks the registered configuration and quota for a selected live budget plan', () => {
+    const { project } = fixture();
+    git(project, ['add', 'assets', 'bench/features', 'bench/repos']);
+    git(project, ['commit', '-m', 'Benchmark inputs'], identity);
+    const plan = join(project, 'bench/plans/E0-large.json');
+    writeJson(plan, budget);
+    const args = ['--project', project, '--experiment', 'E0', '--budget-plan', 'E0-large'];
+    expect(() => parsePlan(args)).toThrow('Missing frozen hidden oracle');
+    expect(() => parsePlan([...args, '--model', 'example/medium'])).toThrow(
+      'matching registered experiment',
+    );
+    writeJson(plan, { ...budget, quota_available: 38 });
+    expect(() => parsePlan(args)).toThrow('matching registered experiment');
+  });
   it('uses a short canonical parent for macOS Docker arms and still probes isolation', async () => {
     const { project, out, args, input } = fixture();
     const temp = mkdtempSync(join(realpathSync(tmpdir()), 'frugal-long-performer-path-'));
