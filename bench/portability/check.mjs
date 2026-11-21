@@ -7,9 +7,12 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repos = JSON.parse(fs.readFileSync(path.join(here, 'repos.json'), 'utf8'));
-const [id, outputDir, localSource] = process.argv.slice(2);
-if (!Object.hasOwn(repos, id) || !outputDir) {
-  console.error('Usage: node check.mjs <google-uuid|yocto-queue> <new-evidence-dir> [local-source]');
+const args = process.argv.slice(2);
+const keep = args.at(-1) === '--keep-checkout';
+if (keep) args.pop();
+const [id, outputDir, localSource] = args;
+if (!Object.hasOwn(repos, id) || !outputDir || args.length > 3) {
+  console.error('Usage: node check.mjs <google-uuid|yocto-queue> <new-evidence-dir> [local-source] [--keep-checkout]');
   process.exit(2);
 }
 
@@ -23,6 +26,7 @@ const log = fs.openSync(path.join(output, 'commands.log'), 'wx');
 const env = {
   PATH: process.env.PATH, HOME: temp, TMPDIR: temp, LANG: 'C', GIT_CONFIG_NOSYSTEM: '1',
   npm_config_cache: process.env.npm_config_cache ?? path.join(temp, 'npm-cache'),
+  npm_config_offline: process.env.npm_config_offline ?? 'false',
   GOTOOLCHAIN: 'local', GOPROXY: 'off', GOCACHE: path.join(temp, 'go-cache'),
   GOPATH: path.join(temp, 'go-path'), NO_COLOR: '1', CI: 'true',
 };
@@ -43,6 +47,7 @@ try {
   run(['git', 'fetch', '--quiet', '--depth=1', localSource ? path.resolve(localSource) : spec.url, spec.commit]);
   run(['git', 'checkout', '--quiet', '--detach', 'FETCH_HEAD']);
   if (run(['git', 'rev-parse', 'HEAD']) !== spec.commit) throw new Error('Unexpected checkout');
+  record.tree = run(['git', 'rev-parse', 'HEAD^{tree}']);
   record.licenseSha256 = sha(path.join(repo, spec.licenseFile));
   if (id === 'yocto-queue') {
     const lock = path.join(here, id, 'package-lock.json');
@@ -51,6 +56,7 @@ try {
     record.npm = run(['npm', '--version']);
     run(['npm', 'ci', '--package-lock=true', '--ignore-scripts', '--no-fund', '--no-audit']);
     run(['node', '--input-type=module', '-e', "import Queue from './index.js'; if ('peekLast' in Queue.prototype) process.exit(1);"]);
+    if (/\bpeekLast\s*\(/.test(fs.readFileSync(path.join(repo, 'index.d.ts'), 'utf8'))) throw new Error('Proposed type already present');
     fs.unlinkSync(path.join(repo, 'package-lock.json'));
   } else {
     record.go = run(['go', 'version']);
@@ -72,6 +78,7 @@ try {
 } finally {
   fs.closeSync(log);
   fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(record, null, 2) + '\n');
-  fs.rmSync(temp, { recursive: true, force: true });
+  if (keep && record.passed) console.log(`Checkout: ${repo}`);
+  else fs.rmSync(temp, { recursive: true, force: true });
   console.log(`${id} ${record.passed ? 'PASS' : 'FAIL'} — ${output}`);
 }

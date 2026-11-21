@@ -12,6 +12,8 @@ node bench/portability/check.mjs yocto-queue bench/runs/portability-repeat/yocto
 node bench/portability/check.mjs google-uuid bench/runs/portability-repeat/google-uuid
 ```
 
-Последним аргументом можно передать путь к локальному зеркалу upstream. Для установки зависимостей JavaScript нужен доступ к реестру либо предварительно заполненный npm-кэш, указанный через `npm_config_cache`. В Go-проекте внешние модули отсутствуют. Функциональность новой фичи, установка Frugal и A/B серий E5 и E10 проверяются отдельно.
+После каталога результатов можно передать путь к локальному зеркалу upstream. Для установки зависимостей JavaScript нужен доступ к реестру либо предварительно заполненный npm-кэш, указанный через `npm_config_cache`. В Go-проекте внешние модули отсутствуют. Функциональность новой фичи, установка Frugal и A/B серий E5 и E10 проверяются отдельно.
+
+Чтобы получить рабочую копию для [публичной задачи `peekLast()`](../../SPEC.md#9-как-доказать-универсальность-и-портативность), добавьте в конец команды `--keep-checkout`. Например, `node bench/portability/check.mjs yocto-queue "$(mktemp -d)/evidence" --keep-checkout` печатает путь к проверенному checkout с установленными зависимостями. В этом каталоге можно сразу повторить `npm test`. В `result.json` записаны коммит, Git tree и SHA-256 lock-файла. Если зависимости уже загружены, для автономной подготовки используйте локальное зеркало, тот же `npm_config_cache` и `npm_config_offline=true`.
 
 Первичный протокол доступен для [JavaScript](../runs/summary/portability-base/yocto-queue/result.json) и [Go](../runs/summary/portability-base/google-uuid-full/result.json).
