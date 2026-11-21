@@ -226,8 +226,38 @@ def test_live_baseline_shows_stage_spend_and_independent_quality(tmp_path):
             },
         },
     )
+    digest = "a" * 64
+    compressed = {
+        "chars": 60,
+        "sourceSha256": digest,
+        "archiveSha256": digest,
+        "recovered": True,
+    }
+    save(
+        receipt_folder / "h03-native-loopback.json",
+        {
+            "fixture": "synthetic-git-log",
+            "endpoint": "loopback",
+            "checks": {
+                "1.0.0": {
+                    "baseline": {"chars": 100, "sourceSha256": digest},
+                    "compressed": compressed,
+                },
+                "2.0.0": {
+                    "baseline": {"chars": 100, "sourceSha256": digest},
+                    "compressed": {**compressed, "archiveSha256": "b" * 64},
+                },
+            },
+        },
+    )
     report.write_report(root, out)
     contents = (out / "REPORT.md").read_text()
+    prototype, appendix = contents.split("## Приложение · все попытки", 1)
+    assert "100 → 60 символов (−40.0%)" in prototype
+    assert "Полный учёт у 1 из 1 архивных живых попыток B0" in prototype
+    assert "1.0.0" in prototype and "2.0.0" not in prototype
+    assert "29/30" in appendix
+    assert "Экономия токенов на полной фиче пока не подтверждена" in prototype
     assert (
         "Автоматические гейты · до независимой оценки | 126/126 | 29/30 | 1 |"
         in contents

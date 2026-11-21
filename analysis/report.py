@@ -5,6 +5,7 @@ import hashlib
 import html
 import json
 import os
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -583,15 +584,145 @@ def report_baseline(a, out):
     return parts
 
 
-def report_parts(attempts, pairs, out):
+def prototype_results(root):
+    summary = root / "summary"
+    results = []
+    path = summary / "h03-native-loopback.json"
+    if path.is_file():
+        evidence = read_json(path)
+        if (evidence.get("fixture"), evidence.get("endpoint")) == (
+            "synthetic-git-log",
+            "loopback",
+        ):
+            for version, check in sorted(evidence.get("checks", {}).items()):
+                base, opt = check["baseline"], check["compressed"]
+                before, after = base["chars"], opt["chars"]
+                digest = base["sourceSha256"]
+                if (
+                    type(before) is int
+                    and type(after) is int
+                    and 0 < after < before
+                    and opt["recovered"] is True
+                    and isinstance(digest, str)
+                    and re.fullmatch(r"[a-f0-9]{64}", digest)
+                    and digest == opt["sourceSha256"] == opt["archiveSha256"]
+                ):
+                    results.append(
+                        (
+                            f"Сжатие вывода · OpenCode {version}",
+                            f"{before} → {after} символов (−{1 - after / before:.1%}) "
+                            "на синтетическом Git-журнале. Оригинал восстановлен с тем же SHA-256.",
+                            path,
+                        )
+                    )
+    path = summary / "h01-task-sessions.json"
+    if path.is_file():
+        evidence = read_json(path)
+        if (
+            evidence.get("purpose") == "synthetic dry-run"
+            and evidence.get("model") == "mock/replay"
+            and evidence.get("eligible_for_token_savings") is False
+        ):
+            isolation_flags = {"session_per_task", "capsule"}
+            combinations = set()
+            for arm in evidence.get("arms", []):
+                flags = frozenset(arm["enabled_flags"])
+                if flags <= isolation_flags and arm["verify_pass"] is True:
+                    combinations.add(flags)
+                rounds = arm.get("review_rounds", [])
+                apply = arm["apply"]
+                if (
+                    isolation_flags <= flags
+                    and arm["verify_pass"] is True
+                    and len(apply) > 1
+                    and len(apply) == len({step["session_id"] for step in apply})
+                    and [record["scope"] for record in rounds]
+                    == ["full", "delta", "full"]
+                    and rounds[-1]["final"] is True
+                    and rounds[-1]["verdict"] == "approved"
+                    and rounds[-1]["tree"] == rounds[-2]["tree"]
+                ):
+                    results.append(
+                        (
+                            "Сессии задач и ревью · открытая репетиция",
+                            f"{len(apply)} задачи в отдельных сессиях. "
+                            f"{len(rounds)} раунда ревью (полное, по diff, итоговое полное) и verify.",
+                            path,
+                        )
+                    )
+            if len(combinations) == 2 ** len(isolation_flags):
+                results.append(
+                    (
+                        "Флаги сессий и капсул · открытая репетиция",
+                        f"Все {len(combinations)} сочетания флагов дошли до verify.",
+                        path,
+                    )
+                )
+    path = summary / "qa-wp05-reference.json"
+    if path.is_file():
+        evidence = read_json(path)
+        acceptance = evidence.get("acceptance", {})
+        if (
+            evidence.get("kind") == "wp05-reference-quality"
+            and evidence.get("experiment") is False
+            and acceptance.get("accepted") is True
+        ):
+            public, hidden = (
+                acceptance["tests"][kind] for kind in ("public", "hidden")
+            )
+            results.append(
+                (
+                    "Независимая проверка контура качества",
+                    f"Эталонный снимок {evidence['feature']} принят. "
+                    f"{public['passed']}/{public['total']} публичных и "
+                    f"{hidden['passed']}/{hidden['total']} закрытых тестов.",
+                    path,
+                )
+            )
+    return results
+
+
+def baseline_accounting(attempts):
+    archived = [a for a in attempts if a.archived_baseline]
+    measured = [a for a in archived if a.meter_ok]
+    if not measured:
+        return ""
+    calls = f"{sum(len(a.model_calls) for a in measured):,}".replace(",", " ")
+    rpt = f"{sum(a.rpt for a in measured):,}".replace(",", " ")
+    return (
+        f"Полный учёт у {len(measured)} из {len(archived)} архивных живых попыток B0. "
+        f"Суммарно по измеренным попыткам {calls} вызовов и {rpt} RPT."
+    )
+
+
+def report_parts(attempts, pairs, out, prototype=()):
     valid = [(name, *arms) for name, (arms, _) in pairs.items() if arms]
     parts = [
         "# Frugal SDD · результаты",
         "Отчёт пересчитан из сохранённых событий вызовов и итогов приёмки.",
     ]
+    if (out / "prototype.mp4").is_file():
+        parts.append("[Офлайн-демо прототипа](prototype.mp4)")
+    if prototype:
+        parts.extend(
+            [
+                "## Подтверждённые результаты прототипа",
+                table(
+                    ["Проверка", "Результат", "Данные"],
+                    [
+                        [esc_md(name), esc_md(result), f"[Сводка]({ref(out, path)})"]
+                        for name, result, path in prototype
+                    ],
+                ),
+            ]
+        )
+    accounting = baseline_accounting(attempts)
+    if accounting:
+        parts.extend(["## Учёт расхода на базовом конвейере", accounting])
     if not valid:
         parts.append(
-            "**Экономия пока не установлена. В архиве нет полной сопоставимой A/B-пары с проверенным расходом и качеством.**"
+            "**Экономия токенов на полной фиче пока не подтверждена.** "
+            "Для оценки нужны сопоставимые живые прогоны, прошедшие приёмку."
         )
     rows = []
     for a in attempts:
@@ -611,16 +742,14 @@ def report_parts(attempts, pairs, out):
                 esc_md(details),
             ]
         )
-    parts.extend(
-        [
-            "## Все попытки",
-            table(ATTEMPT_COLUMNS, rows) if rows else "Архив пока пуст.",
-        ]
-    )
+    appendix = [
+        "## Приложение · все попытки",
+        table(ATTEMPT_COLUMNS, rows) if rows else "Архив пока пуст.",
+    ]
     for a in attempts:
         if a.technical and a.meter_ok:
-            parts.append(f"### Проверка счётчика · {esc_md(a.path.name)}")
-            parts.append(
+            appendix.append(f"### Проверка счётчика · {esc_md(a.path.name)}")
+            appendix.append(
                 table(
                     [
                         "Вход без кэша",
@@ -641,17 +770,17 @@ def report_parts(attempts, pairs, out):
                 "raw/relay.jsonl",
                 "reconciliation.json",
             ]
-            parts.append(
+            appendix.append(
                 " · ".join(
                     f"[{p}]({ref(out, a.path / p)})"
                     for p in files
                     if (a.path / p).is_file()
                 )
             )
-    parts.extend(summarize_series(attempts))
+    appendix.extend(summarize_series(attempts))
     for a in attempts:
         if a.archived_baseline:
-            parts.extend(report_baseline(a, out))
+            appendix.extend(report_baseline(a, out))
     groups = defaultdict(list)
     for label, base, opt in valid:
         name = esc_md(label)
@@ -718,18 +847,19 @@ def report_parts(attempts, pairs, out):
         )
     for name, (_, reason) in pairs.items():
         if reason:
-            parts.append(f"Пара {esc_md(name)}: {esc_md(reason)}.")
-    return parts
+            appendix.append(f"Пара {esc_md(name)}: {esc_md(reason)}.")
+    return parts + appendix
 
 
 def write_report(root, out):
     if not root.is_dir():
         raise ValueError(f"каталог прогонов отсутствует: {root}")
     attempts, pairs = collect(root)
-    parts = report_parts(attempts, pairs, out)
+    prototype = prototype_results(root)
+    parts = report_parts(attempts, pairs, out, prototype)
     out.mkdir(parents=True, exist_ok=True)
     (out / "REPORT.md").write_text("\n\n".join(parts) + "\n", encoding="utf-8")
-    write_dashboard(attempts, pairs, out)
+    write_dashboard(attempts, pairs, out, prototype)
 
 
 def esc_html(value):
@@ -808,7 +938,7 @@ def dashboard_baseline(a, out):
     )
 
 
-def write_dashboard(attempts, pairs, out):
+def write_dashboard(attempts, pairs, out, prototype=()):
     e = esc_html
 
     rows = []
@@ -855,6 +985,25 @@ def write_dashboard(attempts, pairs, out):
                     f'<meter max="{peak}" value="{b.stages[stage]}"></meter> <meter max="{peak}" value="{o.stages[stage]}"></meter></p>'
                 )
     headline = "Сопоставимые пары" if cards else "Экономия пока не установлена"
+    prototype_section = (
+        '<p><a href="prototype.mp4">Офлайн-демо прототипа</a></p>'
+        if (out / "prototype.mp4").is_file()
+        else ""
+    )
+    if prototype:
+        findings = "".join(
+            f"<li><strong>{e(name)}</strong><p>{e(result)} "
+            f"{dashboard_link(out, path, 'Сводка')}</p></li>"
+            for name, result, path in prototype
+        )
+        prototype_section += (
+            f"<h2>Подтверждённые результаты прототипа</h2><ul>{findings}</ul>"
+        )
+    accounting = baseline_accounting(attempts)
+    if accounting:
+        prototype_section += (
+            f"<h2>Учёт расхода на базовом конвейере</h2><p>{e(accounting)}</p>"
+        )
     baselines = "".join(
         dashboard_baseline(a, out) for a in attempts if a.archived_baseline
     )
@@ -874,6 +1023,7 @@ section,.table-scroll{{overflow:auto}} meter{{width:40%;max-width:22rem}}
 .baseline-run{{padding:1rem 1.25rem;margin:1rem 0;border:1px solid #b9cbbf;border-radius:.5rem}}
 .baseline-run h3{{margin-top:0;overflow-wrap:anywhere}} .baseline-run p:last-child{{margin-bottom:0}}
 .baseline-run meter{{width:6rem;vertical-align:middle}}</style><main><h1>Frugal SDD</h1>
+{prototype_section}
 <h2>{headline}</h2>{"".join(cards)}<p><a href="REPORT.md">Отчёт с расчётами и источниками</a></p>
 {baseline_section}
 <h2>Все попытки</h2><section><table><thead><tr>{"".join(f"<th>{h}</th>" for h in ATTEMPT_COLUMNS)}
