@@ -588,6 +588,11 @@ export async function run(argv: string[]): Promise<number> {
         const previous = readJson<Manifest>(path);
         await previousAttempt(dir, previous);
         if (previous.status === 'complete') {
+          if (plan.goSmoke && !plan.dry && validSubscriptionLedger(join(dir, 'raw/relay.jsonl')))
+            writeJson(smokeReceipt(plan.out, previous.model, plan.sha), {
+              run_id: id,
+              ledger_hash: hashTree(join(dir, 'raw/relay.jsonl')),
+            });
           complete = true;
           continue;
         }

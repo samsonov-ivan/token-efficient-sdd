@@ -78,10 +78,16 @@ export function validSubscriptionLedger(file: string) {
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line));
-  const ended = new Map(rows.filter((r) => r.event === 'end').map((r) => [r.id, r]));
+  const begins = rows.filter((r) => r.event === 'begin');
+  const ends = rows.filter((r) => r.event === 'end');
+  const ended = new Map(ends.map((r) => [r.id, r]));
+  const ids = new Set(begins.map((r) => r.id));
   return (
-    ended.size > 0 &&
-    rows.filter((r) => r.event === 'start').every((r) => ended.has(r.id)) &&
+    ids.size > 0 &&
+    ids.size === begins.length &&
+    ended.size === ends.length &&
+    ids.size === ended.size &&
+    Array.from(ids).every((id) => typeof id === 'string' && ended.has(id)) &&
     Array.from(ended.values()).every(
       (row) =>
         row.complete === true &&
