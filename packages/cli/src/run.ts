@@ -565,8 +565,13 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
 export async function run(argv: string[]): Promise<number> {
   if (argv.includes('--evaluate-only')) return evaluateOnly(argv);
   const plan = parsePlan(argv);
+  const project = realpathSync(plan.project);
   const temp = realpathSync(tmpdir());
-  if (childOf(realpathSync(plan.project), temp)) throw new Error('TMPDIR is inside project');
+  if (childOf(project, temp)) throw new Error('TMPDIR is inside project');
+  // The bind mount exposes this path to the model. macOS TMPDIR is long and opaque.
+  const armParent = plan.image && process.platform === 'darwin' ? realpathSync('/tmp') : temp;
+  if (childOf(project, armParent))
+    throw new Error('Performer temporary directory is inside project');
   if (plan.go && !plan.dry) {
     if (!process.env.OPENCODE_API_KEY)
       throw new Error(
@@ -642,7 +647,7 @@ export async function run(argv: string[]): Promise<number> {
         continue;
       }
       const m = initial(plan, slot, id, assetsHash, image, prior, config, configHash);
-      const root = createArmRoot(temp);
+      const root = createArmRoot(armParent);
       const repo = join(root, 'repo');
       m.isolation.root = root;
       const reservation = mkdtempSync(join(plan.out, '.reservation-'));

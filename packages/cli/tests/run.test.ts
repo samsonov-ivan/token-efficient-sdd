@@ -4,16 +4,18 @@ import {
   mkdirSync,
   mkdtempSync,
   realpathSync,
+  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { run, type RunManifest } from '../src/run.js';
+import { describe, expect, it, vi } from 'vitest';
 import { git, readJson, writeJson } from '../src/harness/io.js';
 import { flagsFor } from '../src/harness/plan.js';
+import { Container } from '../src/harness/runner.js';
+import { type RunManifest, run } from '../src/run.js';
 
 const identity = {
   GIT_AUTHOR_NAME: 'Fixture',
@@ -121,6 +123,35 @@ describe('isolated run lifecycle', () => {
     writeFileSync(join(input, 'requirement.md'), 'Changed');
     await expect(run([...args, '--resume'])).rejects.toThrow('Frozen run inputs changed');
   }, 60000);
+  it('uses a short canonical parent for macOS Docker arms and still probes isolation', async () => {
+    const { project, out, args, input } = fixture();
+    const temp = mkdtempSync(join(realpathSync(tmpdir()), 'frugal-long-performer-path-'));
+    const image = vi.spyOn(Container, 'imageID').mockResolvedValue(`sha256:${'0'.repeat(64)}`);
+    const verify = vi
+      .spyOn(Container.prototype, 'verifyIsolation')
+      .mockRejectedValue(new Error('Stop at isolation probe'));
+    const stop = vi.spyOn(Container.prototype, 'stop').mockResolvedValue(undefined);
+    vi.stubEnv('TMPDIR', temp);
+    let root: string | null = null;
+    try {
+      expect(await run([...args, '--image', 'frugal-test'])).toBe(1);
+      const manifest = readJson<RunManifest>(join(out, 'test-1-base-a1/manifest.json'));
+      root = manifest.isolation.root;
+      if (!root) throw new Error('Missing isolated performer root');
+      const expectedParent = process.platform === 'darwin' ? realpathSync('/tmp') : temp;
+      expect(dirname(root)).toBe(expectedParent);
+      expect(statSync(root).mode & 0o777).toBe(0o700);
+      expect(verify).toHaveBeenCalledWith(resolve(project), out, join(input, 'hidden_tests'));
+    } finally {
+      vi.unstubAllEnvs();
+      image.mockRestore();
+      verify.mockRestore();
+      stop.mockRestore();
+      if (root) rmSync(root, { recursive: true, force: true });
+      rmSync(temp, { recursive: true, force: true });
+      rmSync(project, { recursive: true, force: true });
+    }
+  });
   it('keeps the interrupted attempt and its usage, allocates a new ID and preserves the completed arm', async () => {
     const { out, args } = fixture();
     expect(await run(args)).toBe(0);
