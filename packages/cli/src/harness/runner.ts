@@ -149,14 +149,14 @@ export class Container {
     );
     if (containers) await checked(command('docker', ['kill', ...containers.split(/\s+/)]));
   }
-  async verifyIsolation(project: string) {
+  async verifyIsolation(...forbidden: string[]) {
     // In Linux the host project, all other arms and the Docker socket are outside the only bind mount.
     await checked(
       this.exec([
         'node',
         '-e',
         "const fs=require('node:fs'); const denied=process.argv.slice(1); if(denied.some(p=>fs.existsSync(p)))process.exit(1); fs.accessSync(process.cwd(),fs.constants.W_OK)",
-        project,
+        ...forbidden,
         '/var/run/docker.sock',
       ]),
     );

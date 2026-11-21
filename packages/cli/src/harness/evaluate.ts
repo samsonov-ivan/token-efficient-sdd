@@ -39,7 +39,19 @@ export async function evaluate(
   const suites: Suite[] = [];
   const inventory: { public: string[]; hidden: string[] } = { public: [], hidden: [] };
 
-  for (const revision of ['base', 'final'] as const) {
+  let regressionOk = false;
+  let frozenReport = 'final-public.xml';
+  let changedTests: string[] = [];
+  const stages = [
+    ['base', 'public'],
+    ['base', 'hidden'],
+    ['final', 'public'],
+    ['final', 'hidden'],
+    ['regression', 'public'],
+  ] as const;
+  for (const [revision, kind] of stages) {
+    if (revision === 'regression' && !changedTests.length) continue;
+    // A previous test process may have modified its checkout. Each invocation starts on the selected Git tree.
     const root = mkdtempSync(join(realpathSync(tmpdir()), 'frugal-evaluator-'));
     const repo = join(root, 'repo');
     git(root, [
@@ -50,50 +62,107 @@ export async function evaluate(
     ]);
     git(repo, ['checkout', '--detach', revision === 'base' ? plan.pin : finalCommit]);
     git(repo, ['remote', 'remove', 'origin']);
-
-    const env = runnerEnvironment(root);
-    const container = new Container(root, repo, env, image, `evaluate-${root.split('/').pop()}`);
     const config = parse(git(repo, ['show', `${plan.pin}:frugal.yaml`]));
     if (config.test?.report !== 'junit' || typeof config.test?.command !== 'string')
       throw new Error('Run evaluation needs a configured JUnit test command');
-    // Read the oracle only in this new workspace and never execute repository code on the host.
-    const oracle = join(root, 'hidden_tests');
-    cpSync(plan.oracle, oracle, { recursive: true });
-    for (const kind of ['public', 'hidden'] as const) {
-      const name = `${revision}-${kind}`;
-      const report = join(root, 'tmp', `${name}.xml`);
-      const args = kind === 'hidden' ? [oracle] : [];
-      // Command is frozen in the trusted base commit. Arguments are passed separately.
-      const result = await container.exec(
-        [
-          'sh',
-          '-c',
-          `exec ${config.test.command} "$@"`,
-          'frugal-test',
-          ...args,
-          '--rootdir=.',
-          '--junitxml',
-          report,
-        ],
-        {
-          onLine: (line, stderr) => {
-            writeFileSync(join(dir, name + (stderr ? '.stderr' : '.stdout')), `${line}\n`, {
-              flag: 'a',
-            });
-          },
-        },
-      );
-      const xml = safeFile(root, report);
-      writeFileSync(join(dir, `${name}.xml`), xml);
-      const cases = parseReport('junit', xml.toString('utf8'));
-      if (revision === 'base') {
-        inventory[kind] = Array.from(cases.keys()).sort();
-        if (
-          kind === 'public' &&
-          (result.code !== 0 || [...cases.values()].some((s) => s !== 'passed'))
+    const paths = (values: unknown): string[] => {
+      if (
+        !Array.isArray(values) ||
+        !values.length ||
+        values.some(
+          (p) =>
+            typeof p !== 'string' ||
+            p.startsWith('/') ||
+            p.split('/').includes('..') ||
+            p.startsWith('-'),
         )
-          throw new Error('Original public regression suite failed');
-      } else {
+      )
+        throw new Error('Expected relative paths in frozen repository configuration');
+      return values;
+    };
+    const originalTests = paths(config.paths?.tests ?? ['tests']);
+    const pytestConfigs = [
+      'pytest.ini',
+      '.pytest.ini',
+      'pyproject.toml',
+      'tox.ini',
+      'setup.cfg',
+      'conftest.py',
+    ];
+    const frozenFiles = git(repo, [
+      'ls-tree',
+      '-r',
+      '--name-only',
+      plan.pin,
+      '--',
+      ...originalTests,
+      ...pytestConfigs,
+    ])
+      .split('\n')
+      .filter(Boolean);
+    if (!frozenFiles.length) throw new Error('Empty frozen regression inventory');
+    if (revision === 'final' && kind === 'public') {
+      changedTests = git(repo, ['diff', '--name-only', plan.pin, finalCommit, '--', ...frozenFiles])
+        .split('\n')
+        .filter(Boolean);
+    }
+    if (revision === 'regression') {
+      // Re-run original test bodies against final production code, even when candidate tests reuse the same IDs.
+      git(repo, ['restore', '--source', plan.pin, '--staged', '--worktree', '--', ...frozenFiles]);
+    }
+    const env = runnerEnvironment(root);
+    env.PYTHONPATH = paths(config.paths?.src ?? ['.'])
+      .map((p) => join(repo, p))
+      .join(':');
+    const container = new Container(root, repo, env, image, `evaluate-${root.split('/').pop()}`);
+    const name = `${revision}-${kind}`;
+    const report = join(root, 'tmp', `${name}.xml`);
+    const args: string[] = [];
+    if (kind === 'hidden') {
+      const oracle = join(root, 'hidden_tests');
+      cpSync(plan.oracle, oracle, { recursive: true });
+      if (hashTree(oracle) !== plan.oracleHash)
+        throw new Error('Oracle changed while preparing evaluator');
+      args.push(oracle);
+    }
+    const pytestConfig = pytestConfigs.slice(0, -1).find((file) => existsSync(join(repo, file)));
+    if (pytestConfig) args.push('-c', pytestConfig);
+    const result = await container.exec(
+      [
+        'sh',
+        '-c',
+        `exec ${config.test.command} "$@"`,
+        'frugal-test',
+        ...args,
+        '--rootdir=.',
+        '--junitxml',
+        report,
+      ],
+      {
+        onLine: (line, stderr) => {
+          writeFileSync(join(dir, name + (stderr ? '.stderr' : '.stdout')), `${line}\n`, {
+            flag: 'a',
+          });
+        },
+      },
+    );
+    const xml = safeFile(root, report);
+    writeFileSync(join(dir, `${name}.xml`), xml);
+    const cases = parseReport('junit', xml.toString('utf8'));
+    if (revision === 'base') {
+      inventory[kind] = Array.from(cases.keys()).sort();
+      if (
+        kind === 'public' &&
+        (result.code !== 0 || [...cases.values()].some((s) => s !== 'passed'))
+      )
+        throw new Error('Original public regression suite failed');
+    } else {
+      if (kind === 'public') {
+        regressionOk =
+          result.code === 0 && inventory.public.every((id) => cases.get(id) === 'passed');
+        frozenReport = `${name}.xml`;
+      }
+      if (revision === 'final')
         suites.push({
           kind,
           format: 'junit',
@@ -102,9 +171,17 @@ export async function evaluate(
           exit_code: result.code,
           expected_tests: inventory[kind],
         });
-      }
     }
   }
+  writeJson(join(dir, 'frozen-regression.json'), {
+    ok: regressionOk,
+    base_commit: plan.pin,
+    final_commit: finalCommit,
+    changed: changedTests,
+    expected_tests: inventory.public,
+    path: frozenReport,
+    report_sha256: hashTree(join(dir, frozenReport)),
+  });
   const evidence = join(dir, 'evidence.json');
   writeJson(evidence, {
     final_commit: finalCommit,
@@ -122,6 +199,7 @@ export async function evaluate(
     expected_hash: plan.expectedHash,
     oracle_hash: plan.oracleHash,
     evidence_hash: hashTree(evidence),
+    regression_hash: hashTree(join(dir, 'frozen-regression.json')),
     bundle_hash: hashTree(join(runDir, 'final.bundle')),
   });
   // Test processes could edit their checkout. Rebuild the snapshot before using git/OpenSpec outside Docker.
@@ -147,8 +225,8 @@ export async function evaluate(
     ? readJson<Record<string, unknown>>(join(guardDir, 'gates.json'))
     : {};
   return {
-    code,
-    gates: result,
+    code: regressionOk ? code : 1,
+    gates: { ...result, frozen_regression: regressionOk },
     hidden: (result.suites as { hidden?: Record<string, unknown> } | undefined)?.hidden ?? {
       evaluated: false,
     },
