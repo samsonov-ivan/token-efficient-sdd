@@ -55,6 +55,7 @@ import {
 type StageRecord = {
   stage: Stage;
   session_id: string;
+  message_ids?: string[];
   review_iter?: number;
   task?: string;
   started_at: string;
@@ -243,35 +244,57 @@ function stageWriter(m: Manifest, runDir: string, request: Invocation, start: st
   const stageFiles = join(runDir, 'raw/stages');
   mkdirSync(stageFiles, { recursive: true });
   const stem = invocationStem(request);
-  const ids = new Set<string>();
+  const records = new Map<string, StageRecord>();
   return {
     line: (line: string, stderr: boolean) => {
       appendFileSync(join(stageFiles, stem + (stderr ? '.stderr' : '.stdout')), `${line}\n`);
       if (stderr || !line.trim()) return;
       appendFileSync(join(runDir, 'raw/events.jsonl'), `${line}\n`);
       // Preserve malformed JSON in the stream. Meter and executor both reject it.
-      let event: { sessionID?: unknown } | null;
+      let event: { type?: unknown; sessionID?: unknown; part?: { messageID?: unknown } } | null;
       try {
         event = JSON.parse(line);
       } catch {
         return;
       }
-      if (typeof event?.sessionID === 'string' && !ids.has(event.sessionID)) {
-        ids.add(event.sessionID);
-        m.stages.push({
+      if (typeof event?.sessionID !== 'string') return;
+      let record = records.get(event.sessionID);
+      let changed = false;
+      if (!record) {
+        record = {
           stage: request.stage,
           session_id: event.sessionID,
           review_iter: request.reviewIter,
           task: request.task,
           started_at: start,
           finished_at: null,
-        });
-        writeJson(path, m);
+        };
+        records.set(event.sessionID, record);
+        m.stages.push(record);
+        changed = true;
       }
+      // One continued OpenCode session can contain turns for different tasks.
+      const message = event.part?.messageID;
+      if (
+        request.task &&
+        (event.type === 'step_start' || event.type === 'step_finish') &&
+        typeof message === 'string' &&
+        message.length > 0
+      ) {
+        record.message_ids ??= [];
+        if (!record.message_ids.includes(message)) {
+          record.message_ids.push(message);
+          changed = true;
+        }
+      }
+      if (changed) writeJson(path, m);
     },
     end: () => {
-      for (const s of m.stages)
-        if (ids.has(s.session_id) && s.finished_at === null) s.finished_at = now();
+      const finished = now();
+      for (const record of records.values()) {
+        record.message_ids?.sort();
+        record.finished_at = finished;
+      }
       writeJson(path, m);
     },
   };
