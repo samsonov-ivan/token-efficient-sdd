@@ -14,9 +14,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json && node --input-type=module -e \"import { copyFileSync } from 'node:fs'; copyFileSync('../../schemas/findings.schema.json', 'dist/findings.schema.json')\""
   },
   "dependencies": {
+    "ajv": "8.20.0",
     "fast-xml-parser": "5.12.1",
     "yaml": "2.8.2"
   }
