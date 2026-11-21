@@ -103,6 +103,7 @@ function initial(
     review_max: 5,
     endpoint: plan.endpoint,
     limits: plan.limits,
+    stage_timeout_seconds: plan.timeout,
   };
   return {
     run_id: runId,
@@ -197,6 +198,7 @@ function provenance(plan: Plan, baselineHash: string, configHash: string, image:
       plan.requested,
       plan.endpoint,
       plan.limits,
+      plan.timeout,
       plan.flags,
       plan.sha,
       baselineHash,
@@ -264,7 +266,12 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
   process.on('SIGINT', terminate);
   try {
     if (c) {
-      await c.verifyIsolation(plan.project);
+      const others = plan.slots
+        .map((s) => join(plan.out, `${s.pair}-${s.branch}-a1`, 'manifest.json'))
+        .filter(existsSync)
+        .map((path) => readJson<Manifest>(path).isolation.root)
+        .filter((path): path is string => !!path && path !== root);
+      await c.verifyIsolation(plan.project, plan.out, plan.oracle, ...new Set(others));
       const [opencode, openspec, node, python, test_runner] = await Promise.all(
         [
           ['opencode', '--version'],
@@ -321,13 +328,22 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
         for (const line of result.stdout.trimEnd().split('\n')) writer.line(line, false);
       } else {
         if (!c) throw new Error('Live opencode requires container isolation');
-        result = await c.exec(['opencode', ...request.args], {
-          network: true,
-          credentials: plan.endpoint ? ['FRUGAL_PROVIDER_API_KEY'] : credentialKeys(m.provider),
-          onLine: writer.line,
-        });
+        result = await c.exec(
+          ['timeout', '--kill-after=10s', `${String(plan.timeout)}s`, 'opencode', ...request.args],
+          {
+            network: true,
+            credentials: plan.endpoint ? ['FRUGAL_PROVIDER_API_KEY'] : credentialKeys(m.provider),
+            onLine: writer.line,
+          },
+        );
       }
       writer.end();
+      if (!plan.dry && (result.code === 124 || result.code === 137)) {
+        interrupted = true;
+        throw new Error(
+          `Stage ${request.stage} interrupted or timed out after at most ${plan.timeout} seconds (exit ${result.code})`,
+        );
+      }
       if (interrupted) throw new Error('Interrupted during stage');
       return result;
     };
@@ -447,6 +463,7 @@ export async function run(argv: string[]): Promise<number> {
     join(plan.out, '.series', `${plan.id}.json`),
     digest(JSON.stringify([shared, plan.dry, plan.slots, plan.experiment, plan.budget])),
   );
+  let successful = true;
   for (const slot of plan.slots) {
     let prior: string | null = null;
     let complete = false;
@@ -466,12 +483,15 @@ export async function run(argv: string[]): Promise<number> {
           complete = true;
           continue;
         }
-        if (!previous.dry_run && previous.pipeline_complete)
-          throw new Error(
-            'Model pipeline already finished. Use --evaluate-only ' +
-              dir +
-              ' --evidence <assessment> to complete independent evaluation.',
-          );
+        // A finished model failure consumes its preregistered slot. Only interruption or a failure before any model invocation can retry.
+        if (
+          previous.status === 'failed' &&
+          (previous.pipeline_complete || previous.stages.length > 0)
+        ) {
+          successful = false;
+          complete = true;
+          continue;
+        }
         prior = id;
         continue;
       }
@@ -506,18 +526,21 @@ export async function run(argv: string[]): Promise<number> {
       console.log(
         JSON.stringify({ run_id: id, status: m.status, manifest: join(dir, 'manifest.json') }),
       );
-      if (m.status !== 'complete') return 1;
+      if (m.status !== 'complete') {
+        successful = false;
+        if (m.status === 'interrupted' || (!m.pipeline_complete && !m.stages.length)) return 1;
+      }
       complete = true;
     }
   }
-  if (plan.dry)
+  if (plan.dry && successful)
     writeJson(receipt, {
       series: plan.id,
       finished_at: now(),
       feature: plan.feature,
       requested_model: plan.requested,
     });
-  return 0;
+  return successful ? 0 : 1;
 }
 
 async function evaluateOnly(argv: string[]): Promise<number> {
@@ -532,7 +555,8 @@ async function evaluateOnly(argv: string[]): Promise<number> {
       'reviewer-key': { type: 'string' },
     },
   });
-  const dir = realpathSync(v['evaluate-only']!);
+  if (!v['evaluate-only']) throw new Error('Missing --evaluate-only run directory');
+  const dir = realpathSync(v['evaluate-only']);
   const manifest = join(dir, 'manifest.json');
   const m = readJson<Manifest>(manifest);
   if (!m.pipeline_complete || !m.final_commit || m.dry_run || m.status === 'running')
@@ -573,6 +597,11 @@ async function evaluateOnly(argv: string[]): Promise<number> {
     receipt.oracle_hash !== m.test_oracle_hash
   )
     throw new Error('Offline evaluator inputs changed');
+  const regression = readJson<{ ok: boolean; path: string; report_sha256: string }>(
+    join(input, 'frozen-regression.json'),
+  );
+  if (hashTree(join(input, 'frozen-regression.json')) !== receipt.regression_hash || !regression.ok)
+    throw new Error('Original regression suite failed or its frozen evidence changed');
   const repo = restoreFinal(dir, m.final_commit);
   const command = [
     '--repo',

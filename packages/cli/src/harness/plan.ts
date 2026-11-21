@@ -36,6 +36,7 @@ export function parsePlan(argv: string[]) {
       'context-limit': { type: 'string' },
       'output-limit': { type: 'string' },
       calibration: { type: 'boolean' },
+      timeout: { type: 'string' },
     },
   });
   const project = resolve(v.project ?? git(process.cwd(), ['rev-parse', '--show-toplevel']));
@@ -75,6 +76,9 @@ export function parsePlan(argv: string[]) {
     limits = { context, output };
   } else if (v['context-limit'] || v['output-limit'])
     throw new Error('Model limits require --endpoint');
+  const timeout = Number(v.timeout ?? 1800);
+  if (!Number.isSafeInteger(timeout) || timeout <= 0)
+    throw new Error('Stage timeout must be a positive integer in seconds');
   const mode = v.mode ?? budget?.mode ?? 'baseline';
   if (!['baseline', 'optimized', 'ablation', 'paired'].includes(mode))
     throw new Error(`Unknown mode: ${mode}`);
@@ -155,6 +159,7 @@ export function parsePlan(argv: string[]) {
     experiment,
     endpoint,
     limits,
+    timeout,
     calibration: !!v.calibration || experiment === 'E0' || experiment === 'E0-s',
     budget,
     mode,
