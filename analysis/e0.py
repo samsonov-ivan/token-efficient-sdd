@@ -29,7 +29,7 @@ CANDIDATES = {
     "specs": "H-12, H-24, H-25",
     "design": "H-12, H-24, H-25",
     "tasks": "H-12, H-24, H-25",
-    "apply": "H-01, H-02, H-03, H-08, H-10, H-11, H-22, H-24",
+    "apply": "H-01, H-02, H-03, H-08, H-10, H-11, H-22, H-24, H-102",
     "review": "H-04, H-05, H-06, H-16, H-101",
     "fix": "H-02, H-03, H-05, H-11, H-23, H-101, H-102",
     "verify": "H-03, H-04, H-18, H-24",
@@ -306,7 +306,7 @@ def svg_plots(groups, fixture):
         )
         if maximum:
             body.append(
-                f'<text x="474" y="{y + 18}" font-size="12">Шкала точек 0–{maximum:,} RPT</text>'
+                f'<text x="474" y="{y + 18}" font-size="12">Шкала точек 0–{grouped(maximum)} RPT</text>'
             )
         y += 40
         for index, a in enumerate(attempts, start=1):
@@ -316,7 +316,7 @@ def svg_plots(groups, fixture):
                     f'<text x="28" y="{y + 4}" font-size="12">Прогон №{index}</text>',
                     f'<line x1="386" x2="728" y1="{y}" y2="{y}" stroke="#cad3df"/>',
                     f'<circle cx="{x:.2f}" cy="{y}" r="4.5" fill="#176d83"><title>{a.rpt} RPT</title></circle>',
-                    f'<text x="746" y="{y + 4}" font-size="12">{a.rpt:,}</text>',
+                    f'<text x="746" y="{y + 4}" font-size="12">{grouped(a.rpt)}</text>',
                 ]
             )
             y += 22
@@ -341,6 +341,10 @@ def full_acceptance(a):
         and a.manifest.get("status") == "complete"
         and a.metrics.get("Q_hidden") == 1
     )
+
+
+def grouped(value):
+    return f"{value:,}".replace(",", " ")
 
 
 def attempt_table(runs, attempts, out, fixture):
@@ -377,7 +381,7 @@ def describe(attempts, stages, merged, label, minimum):
         q1, _, q3 = quantiles(totals, n=4, method="inclusive")
         iqr = f"{q1:g}–{q3:g} (ширина {q3 - q1:g})"
     lines = [
-        f"RPT: медиана {median(totals):g}, диапазон {min(totals)}–{max(totals)}, "
+        f"Медиана RPT {median(totals):g}, диапазон {min(totals)}–{max(totals)}, "
         f"IQR {iqr}, выборочный CV {percent(cv)}.",
         "",
     ]
@@ -425,6 +429,8 @@ def describe(attempts, stages, merged, label, minimum):
 
 
 def analyze(root, declared, out, fixture):
+    if not root.is_dir():
+        raise ValueError("Каталог архива запусков отсутствует.")
     if out.resolve().is_relative_to(root.resolve()):
         raise ValueError("Каталог отчёта должен находиться вне архива запусков.")
     out.mkdir(parents=True, exist_ok=True)
@@ -461,9 +467,10 @@ def analyze(root, declared, out, fixture):
             f"## {label} · {experiment}",
             "",
             f"Модель **{model}**." if model else "Модель не объявлена.",
-            f"Полные замеры: {len(attempts)} из {len(runs)}. Минимум ТЗ: {minimum}, цель: {target}."
+            f"Полный замер у {len(attempts)} из {len(runs)} заявленных попыток. "
+            f"Минимум по ТЗ {minimum}, цель {target}."
             + (
-                f" Полная приёмка: {qa_count} из {len(attempts)}."
+                f" Полная приёмка подтверждена у {qa_count} из {len(attempts)} замеров."
                 if not fixture
                 else ""
             ),

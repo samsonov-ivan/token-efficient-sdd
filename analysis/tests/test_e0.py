@@ -109,11 +109,11 @@ def test_fixture_report_recomputes_and_is_byte_reproducible(tmp_path):
     assert first == (md.read_bytes(), svg.read_bytes())
     contents = md.read_text()
     assert "**Синтетическая фикстура." in contents
-    assert "Полные замеры: 3 из 3." in contents
-    assert "Полные замеры: 1 из 1. Минимум ТЗ: 2" in contents
-    assert "Полные замеры: 0 из 0. Минимум ТЗ: 3" in contents
+    assert "Полный замер у 3 из 3 заявленных попыток." in contents
+    assert "Полный замер у 1 из 1 заявленных попыток. Минимум по ТЗ 2" in contents
+    assert "Полный замер у 0 из 0 заявленных попыток. Минимум по ТЗ 3" in contents
     assert (
-        "RPT: медиана 120, диапазон 100–140, IQR 110–130 (ширина 20), выборочный CV 16.7%"
+        "Медиана RPT 120, диапазон 100–140, IQR 110–130 (ширина 20), выборочный CV 16.7%"
         in contents
     )
     assert "| Реализация | 240 | 66.7% | 66.7% | Наибольшая доля |" in contents
