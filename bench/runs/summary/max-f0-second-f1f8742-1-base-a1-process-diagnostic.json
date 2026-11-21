@@ -1,0 +1,106 @@
+{
+  "accepted": false,
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "baseline_assets_sha256": "bd5d3e928bde7061ff832c543da6924eb152bd4caf735e32eb21416a79aa64d9",
+  "baseline_sha256": "7e69654fe233cb14149bcfded67d1e6a033a1fbbc022839d0e9e2ac0eea9b695",
+  "diagnostic_scope": "post-pipeline attempt audit",
+  "evaluator_request_produced": false,
+  "final_snapshot_produced": false,
+  "kind": "b0-pre-snapshot-stage-diagnostic",
+  "manifest_sha256": "2307e608e227149d93d02249e4f0946145a1194a02c6a5e2f46839bf7eaee9de",
+  "meter_replay": {
+    "allowance": 0.09389222999999994,
+    "billing_source_counts": {
+      "go": 133
+    },
+    "byte_identical_to_archive": [
+      "calls.jsonl",
+      "meter.json",
+      "stages.csv"
+    ],
+    "complete": true,
+    "cost": 0,
+    "http_status_counts": {
+      "200": 133
+    },
+    "list_cost": 0.15648707999999997,
+    "model_calls": 133,
+    "reasoning_effort_counts": {
+      "max": 133
+    },
+    "relative_discrepancy": 0,
+    "review_model_calls": 28,
+    "rpt": 8862963
+  },
+  "meter_sha256": "a83c83e4cd2287c7a8b74fe1adaffdbd85626da10f66a4e6be3d863233b88b1a",
+  "pipeline_complete": false,
+  "product_quality_observed": false,
+  "raw_events_sha256": "7f4e0779865b0afeb001223221de97569d3ee8b4763660ce2152602a1f935d0a",
+  "relay_sha256": "645eca566fc435941f5bacc5de559f7c527dd61650b331eb48e7f402d61418eb",
+  "requested_variant": "max",
+  "review_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "review_stage": {
+    "classification": "OpenCode headless review stopped after the external-directory rule denied a Bash call containing a read of the performer configuration outside the checkout",
+    "denied_container_directory": "<performer-root>/opencode-config",
+    "denied_operation": "read opencode-config/opencode.json with cat in a combined Bash command",
+    "denied_permission": "external_directory",
+    "denied_tool": "bash",
+    "denied_tool_event_line": 95,
+    "last_completed_tool_event_line_before_denial": 92,
+    "outside_checkout_scope": true,
+    "round": 1,
+    "runner_completion_check_rejected_unfinished_stage": true,
+    "runner_error": "No completed model response (finish=tool-calls)",
+    "stderr_sha256": "840c816d506594880a0bbd458e5afd61de3c3a953fe7bc47e3843f2c21441d4c",
+    "terminal_finish_event_line": 96,
+    "terminal_finish_reason": "tool-calls",
+    "terminal_step_has_text": false,
+    "terminal_verdict_produced": false
+  },
+  "run_id": "max-f0-second-f1f8742-1-base-a1",
+  "runner_commit": "f1f87429352157e0bbfeb061b5ca376af457ccf9",
+  "stages": [
+    {
+      "answer_saved": true,
+      "assistant_text_events": 1,
+      "error_events": 0,
+      "finish_reasons": {
+        "stop": 1,
+        "tool-calls": 20
+      },
+      "finished_steps": 21,
+      "stage": "spec",
+      "stdout_sha256": "89db90ab23e7d209ff342ef9060c2244ad29eddff8c8ab44083c0a3c9c9496ad",
+      "terminal_finish_reason": "stop",
+      "tool_use_events": 34
+    },
+    {
+      "answer_saved": true,
+      "assistant_text_events": 2,
+      "error_events": 0,
+      "finish_reasons": {
+        "stop": 1,
+        "tool-calls": 83
+      },
+      "finished_steps": 84,
+      "stage": "apply",
+      "stdout_sha256": "c772960a3d19ff44d9ad21b831fed77f6a0e6e9cc7634f1746fed041d940c308",
+      "terminal_finish_reason": "stop",
+      "tool_use_events": 106
+    },
+    {
+      "answer_saved": false,
+      "assistant_text_events": 0,
+      "error_events": 0,
+      "finish_reasons": {
+        "tool-calls": 28
+      },
+      "finished_steps": 28,
+      "stage": "review",
+      "stdout_sha256": "a3dbef30ddc687eccfdebbe30572f631125f157ff2c7fdfeed85e27ad56c02c8",
+      "terminal_finish_reason": "tool-calls",
+      "tool_use_events": 40
+    }
+  ],
+  "status": "failed"
+}
