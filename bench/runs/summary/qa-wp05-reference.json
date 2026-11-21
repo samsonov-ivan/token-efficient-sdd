@@ -1,0 +1,153 @@
+{
+  "acceptance": {
+    "accepted": true,
+    "checks_passed": [
+      "consistency",
+      "full_suite",
+      "hidden",
+      "review",
+      "semantic",
+      "trace",
+      "validate"
+    ],
+    "evidence_sha256": "9d80ee16892ce731d80789dbf4f7b5141dbf87ba132188e6918931c3cb6f3430",
+    "gate_exit_code": 0,
+    "gates_sha256": "5a05b1c8af2cba67a62817198c8cbd22840e7a6c300108abb54becc2a1008287",
+    "metrics": {
+      "Cons": 1,
+      "Cov_expected": 1,
+      "Cov_req": 1,
+      "Cov_scn": 1,
+      "Cov_task": 1,
+      "Green": 1,
+      "Q_hidden": 1
+    },
+    "original_request_sha256": "5461275367ae5e193c789ea0edc1e7331721222befcaf04fdbce8dd641ae1a5b",
+    "original_signature": {
+      "algorithm": "Ed25519",
+      "assessment_sha256": "e49fd0ae718176434526bf5a1de42acc1fc69d000c599f1896ea3539bc95a930",
+      "reviewer_key_sha256": "ffb3eecf984ebf50b5f3a59b443581f442de27980d1a90d08da7ffbb1b4c7112",
+      "signature_sha256": "584b8831373b105e73d0a3216aa11aae3f22f1dd00ac680c71278c92f27b98a5"
+    },
+    "report_sha256": {
+      "hidden": "5fd8236731fd77467d40b670505a9e1c5a4e4a05936e2ea7072e1a43c4a8b516",
+      "public": "2002e7698a3c4249506833f1563e0e36cb47223d8f1c0e08d11248f53d6b55c3"
+    },
+    "request_sha256": "1f08a6c0a7b88ab1c4ed43990b6a274d44ab90c7aa5915c94e07c821de8dbe6c",
+    "signature": {
+      "algorithm": "Ed25519",
+      "assessment_sha256": "e68f65682491cd802320fc34de49ec8a2114cab5fc0a66933e8502aa0680e8ec",
+      "reviewer_key_sha256": "ee9ca3bd3e9e4ffb50a173a256f584531dd0011047da95488651fd5eeb5ba623",
+      "signature_sha256": "6e79d1ccd8a7543b97bc93106c1145154e8e1e7abe93d91c28d4560b26b3bbf6"
+    },
+    "tests": {
+      "hidden": {
+        "passed": 30,
+        "total": 30
+      },
+      "public": {
+        "passed": 86,
+        "total": 86
+      }
+    },
+    "trace_counts": {
+      "links": 25,
+      "requirements": 6,
+      "scenarios": 18,
+      "tasks": 11
+    },
+    "trace_sha256": "74193ac8e870f36b1f4a8ae2bbb41fb0a0ab01435d6e43e701da760135736d6d"
+  },
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "component_tests": {
+    "log_sha256": "36629b42d00122bd896c74dd6334ae8aef4f65b2ca1669d46b7b21e155dd8b2e",
+    "passed": 14,
+    "total": 14
+  },
+  "context": "independent_engineering_qa",
+  "expected_sha256": "ff9486ea1c3bd03eb2a95c4ebb6f77987e7c78aef0aab4d1db7bc47ec18e5fea",
+  "experiment": false,
+  "feature": "add-transfer-limits",
+  "guard_commit": "5eabc88667aac0ead69944bcb3780d864a5b6b9e",
+  "kind": "wp05-reference-quality",
+  "negative_controls": {
+    "contradictory-design": {
+      "gate_exit_code": 1,
+      "gates_sha256": "e94616ef8c46d1d14226495102b10c1fa7d6bafdccdfc336f263e7bb86f4d97a",
+      "rejected_by": "semantic",
+      "snapshot_commit": "ffe28b88d7135e7760fbe0ccb880012083ddb5c0",
+      "tests": {
+        "hidden": {
+          "passed": 30,
+          "total": 30
+        },
+        "public": {
+          "passed": 86,
+          "total": 86
+        }
+      }
+    },
+    "dangling-task": {
+      "gate_exit_code": 1,
+      "gates_sha256": "0ad1b7eee8f435033fdab4bb4ef87879b04b9d49a774164052e630ce1495c64f",
+      "rejected_by": "consistency",
+      "snapshot_commit": "4960a6b8b377e95d8ced79e44d0664efe8bcaf4c",
+      "tests": {
+        "hidden": {
+          "passed": 30,
+          "total": 30
+        },
+        "public": {
+          "passed": 86,
+          "total": 86
+        }
+      }
+    },
+    "deleted-test": {
+      "gate_exit_code": 1,
+      "gates_sha256": "0906442d6306ab4eb304fc8a152320fd3325acf905b5fcca8b2f1cf8e4e0c71b",
+      "rejected_by": "full_suite",
+      "snapshot_commit": "9f4118ed74a63b6a0574ed79cb780339726392ea",
+      "tests": {
+        "hidden": {
+          "passed": 30,
+          "total": 30
+        },
+        "public": {
+          "passed": 85,
+          "total": 85
+        }
+      }
+    }
+  },
+  "oracle_commit": "e45d4a1a209fb90d1db4c72b4cee9fc876996f83",
+  "oracle_sha256": "5233a3655e53b59a2270ea58b20ca2b394cde48b79889d3f2d6f5c7f5faa6b98",
+  "reference_commit": "177187d38fa0dfae902bf0824998aac27932ff99",
+  "review": {
+    "counted_in_pipeline": false,
+    "rounds": [
+      {
+        "checks": {
+          "large_offset_contract": false,
+          "missing_body_contract": false
+        },
+        "probe_sha256": "74da2fe29ef55d7a7f6dbd2da9122f02238a4ca90c70225edd1b6318e7288a6f",
+        "round": 1,
+        "snapshot_commit": "0b8298b9e5bf5b360a31085c37f02920cb684112",
+        "verdict": "fix"
+      },
+      {
+        "checks": {
+          "large_offset_contract": true,
+          "missing_body_contract": true,
+          "single_credit_after_resume": true
+        },
+        "probe_sha256": "723b074757496a7c7c16a2eea58fc13411b0a63fb4d54ad45e45652120bb2b3d",
+        "round": 2,
+        "snapshot_commit": "177187d38fa0dfae902bf0824998aac27932ff99",
+        "verdict": "pass"
+      }
+    ]
+  },
+  "schema_version": 1
+}

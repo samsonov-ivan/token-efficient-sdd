@@ -29,6 +29,17 @@ CONTROLS = (
 )
 QUALITY = ("Cov_req", "Cov_scn", "Cov_task", "Cov_expected", "Green", "Cons")
 CHECKS = ("validate", "consistency", "trace", "full_suite", "review", "semantic")
+ATTEMPT_COLUMNS = (
+    "Запуск",
+    "Тип",
+    "Плечо",
+    "Модель",
+    "RPT",
+    "Стоимость / списание Go",
+    "Стоимость по прайсу Go, $",
+    "Расход квоты Go",
+    "Состояние",
+)
 STAGE_NAMES = {
     "propose": "Предложение",
     "spec": "Спецификация",
@@ -64,6 +75,8 @@ class Attempt:
     meter_ok: bool = False
     quality_ok: bool = False
     cost: float | None = None
+    list_cost: float | None = None
+    allowance: float | None = None
 
     @property
     def rpt(self):
@@ -74,9 +87,27 @@ class Attempt:
         return self.manifest.get("dry_run") is False
 
     @property
+    def technical(self):
+        return (
+            self.manifest.get("kind") == "meter-smoke"
+            or self.manifest.get("purpose") == "go-smoke"
+        )
+
+    @property
+    def billing_values(self):
+        return [
+            value if value is not None else "—"
+            for value in (self.cost, self.list_cost, self.allowance)
+        ]
+
+    @property
     def accepted(self):
         return (
-            self.live and self.rpt is not None and self.quality_ok and not self.errors
+            self.live
+            and not self.technical
+            and self.rpt is not None
+            and self.quality_ok
+            and not self.errors
         )
 
 
@@ -141,9 +172,14 @@ def inspect_usage(a):
     if crosscheck.exists():
         evidence = read_json(crosscheck)
         if evidence.get("matched") is False or evidence.get("fields_match") is False:
-            raise ValueError("первичный источник расходится с нормализованной разбивкой")
-    a.meter_ok = True
+            raise ValueError(
+                "первичный источник расходится с нормализованной разбивкой"
+            )
+    billing = summary.get("opencode_billing") or {}
+    a.list_cost = billing.get("list_cost")
+    a.allowance = billing.get("allowance")
     a.cost = summary.get("cost")
+    a.meter_ok = True
 
 
 def inspect_quality(a):
@@ -180,7 +216,7 @@ def inspect_run(path):
         a.errors.append(str(exc))
         return a
     checks = [inspect_usage]
-    if a.manifest.get("kind") != "meter-smoke" and a.live:
+    if a.live and not a.technical:
         checks.append(inspect_quality)
     for check in checks:
         try:
@@ -221,11 +257,7 @@ def collect(root):
             attempts.append(inspect_run(path.parent))
     pairs = defaultdict(list)
     for a in attempts:
-        if (
-            a.live
-            and a.manifest.get("kind") != "meter-smoke"
-            and a.manifest.get("pair_id")
-        ):
+        if a.live and not a.technical and a.manifest.get("pair_id"):
             pairs[a.manifest["pair_id"]].append(a)
     return attempts, {key: compare_arms(arms) for key, arms in sorted(pairs.items())}
 
@@ -257,6 +289,8 @@ def sign_p(ratios):
 
 
 def kind_of(a):
+    if a.manifest.get("purpose") == "go-smoke":
+        return "проверка OpenCode Go · " + ("модель" if a.live else "mock")
     if a.manifest.get("kind") == "meter-smoke":
         return "проверка счётчика · " + ("модель" if a.live else "mock")
     if a.live:
@@ -301,7 +335,7 @@ def summarize_series(attempts):
     series = defaultdict(list)
     for a in attempts:
         m = a.manifest
-        if a.live and m.get("kind") != "meter-smoke" and m.get("series_id"):
+        if a.live and not a.technical and m.get("series_id"):
             series[m["series_id"]].append(a)
     result = []
     for name, members in sorted(series.items()):
@@ -377,31 +411,18 @@ def report_parts(attempts, pairs, out):
                 esc_md(m.get("branch", "—")),
                 esc_md(m.get("model", "—")),
                 a.rpt if a.rpt is not None else "—",
-                a.cost if a.cost is not None else "—",
+                *a.billing_values,
                 esc_md(details),
             ]
         )
     parts.extend(
         [
             "## Все попытки",
-            table(
-                [
-                    "Запуск",
-                    "Тип",
-                    "Плечо",
-                    "Модель",
-                    "RPT",
-                    "Стоимость из usage",
-                    "Состояние",
-                ],
-                rows,
-            )
-            if rows
-            else "Архив пока пуст.",
+            table(ATTEMPT_COLUMNS, rows) if rows else "Архив пока пуст.",
         ]
     )
     for a in attempts:
-        if a.manifest.get("kind") == "meter-smoke" and a.meter_ok:
+        if a.technical and a.meter_ok:
             parts.append(f"### Проверка счётчика · {esc_md(a.path.name)}")
             parts.append(
                 table(
@@ -418,8 +439,10 @@ def report_parts(attempts, pairs, out):
             )
             files = [
                 "calls.jsonl",
+                "meter.json",
                 "raw/events.jsonl",
                 "raw/opencode.db",
+                "raw/relay.jsonl",
                 "reconciliation.json",
             ]
             parts.append(
@@ -523,6 +546,7 @@ def write_dashboard(attempts, pairs, out):
             e(a.manifest.get("branch", "—")),
             e(a.manifest.get("model", "—")),
             str(a.rpt) if a.rpt is not None else "—",
+            *[e(value) for value in a.billing_values],
             e(" · ".join(a.errors) if a.errors else "проверен"),
         ]
         rows.append("<tr>" + "".join(f"<td>{v}</td>" for v in cells) + "</tr>")
@@ -547,7 +571,7 @@ h1,h2{{line-height:1.2}} a{{color:#126347}} table{{border-collapse:collapse;widt
 th,td{{text-align:left;padding:.6rem;border-bottom:1px solid #b9cbbf;vertical-align:top;overflow-wrap:anywhere}}
 section{{overflow:auto}} meter{{width:40%;max-width:22rem}}</style><main><h1>Frugal SDD</h1>
 <h2>{headline}</h2>{"".join(cards)}<p><a href="REPORT.md">Отчёт с расчётами и источниками</a></p>
-<h2>Все попытки</h2><section><table><thead><tr>{"".join(f"<th>{h}</th>" for h in ["Запуск", "Тип", "Плечо", "Модель", "RPT", "Состояние"])}
+<h2>Все попытки</h2><section><table><thead><tr>{"".join(f"<th>{h}</th>" for h in ATTEMPT_COLUMNS)}
 </tr></thead><tbody>{"".join(rows)}</tbody></table></section></main></html>"""
     (out / "dashboard.html").write_text(page, encoding="utf-8")
 

@@ -100,6 +100,42 @@ def test_recompute_and_exclude_replay(tmp_path):
     assert "30.00%" in (out / "dashboard.html").read_text()
 
 
+def test_go_smoke_billing_is_visible_outside_pair_and_series(tmp_path):
+    root = tmp_path / "runs"
+    make_arm(root, "base", "base", 100)
+    make_arm(root, "opt", "opt", 70)
+    smoke = make_arm(root, "go-smoke", "base", 10)
+    manifest_file = smoke / "manifest.json"
+    manifest = report.read_json(manifest_file)
+    manifest.update(purpose="go-smoke", accepted=False, series_id="go-control")
+    save(manifest_file, manifest)
+    (smoke / "quality" / "gates.json").unlink()
+    meter_file = smoke / "meter.json"
+    meter = report.read_json(meter_file)
+    meter.update(cost=0, opencode_billing={"list_cost": 0.003, "allowance": 0.004})
+    save(meter_file, meter)
+
+    attempts, pairs = report.collect(root)
+    checked = next(a for a in attempts if a.path == smoke)
+    assert checked.rpt == 10
+    assert checked.billing_values == [0, 0.003, 0.004]
+    assert checked.errors == []
+    assert not checked.accepted
+    assert pairs["pair"][1] == ""
+
+    out = tmp_path / "output"
+    report.write_report(root, out)
+    markdown = (out / "REPORT.md").read_text()
+    dashboard = (out / "dashboard.html").read_text()
+    assert "## Серия go-control" not in markdown
+    assert "| 10 | 0 | 0.003 | 0.004 |" in markdown
+    assert "<td>10</td><td>0</td><td>0.003</td><td>0.004</td>" in dashboard
+    for contents in (markdown, dashboard):
+        assert "проверка OpenCode Go · модель" in contents
+        assert "Стоимость по прайсу Go, $" in contents
+        assert "Расход квоты Go" in contents
+
+
 def test_reject_tampering_mismatches_and_missing_raw(tmp_path):
     a = make_arm(tmp_path, "base", "base", 100)
     b = make_arm(tmp_path, "opt", "opt", 70)
