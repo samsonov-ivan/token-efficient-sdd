@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readChange } from '../src/quality/change.js';
 import { qualityCommand } from '../src/quality/command.js';
+import { pythonTestContext } from '../src/quality/python.js';
 import { Snapshot } from '../src/quality/snapshot.js';
 import { parseReport } from '../src/quality/suites.js';
 import type { Change, Evidence, Expected } from '../src/quality/types.js';
@@ -240,6 +241,66 @@ describe('final snapshot quality', () => {
     const g = evaluate(model, expected, other.evidence, other.snapshot, other.root, false).gates;
     expect(g.metrics.Cov_req).toBe(0);
     expect(g.errors.join()).toContain('tautological assertion');
+  });
+  it('traces an assertion after a nested helper in a decorated multiline async test', () => {
+    const source = `import pytest
+from app.range import allowed
+
+@pytest.mark.scenario(
+    '${scn}',
+)
+@pytest.mark.task('1.1')
+async def test_limit(
+    endpoint=10,
+):
+    def value():
+        return endpoint
+
+    assert allowed(value())
+`;
+    const other = fixture(false, source);
+    other.evidence.links[0].assertion = {
+      path: 'tests/test_range.py',
+      line: 14,
+      text: 'assert allowed(value())',
+    };
+    const g = evaluate(model, expected, other.evidence, other.snapshot, other.root, false).gates;
+    expect(g.errors).toEqual([]);
+    expect(g.metrics.Cov_req).toBe(1);
+  });
+  it.each([
+    [
+      'a dead nested helper even when its name matches the reported test',
+      '    def test_limit():\n        assert allowed(8)\n\n    assert allowed(10)\n',
+    ],
+    ['another test', '    assert allowed(10)\n\ndef test_other():\n    assert allowed(8)\n'],
+    ['an adjacent class body', '    assert allowed(10)\n\nclass Other:\n    assert allowed(8)\n'],
+    ['a triple-quoted string', '    """\n    assert allowed(8)\n    """\n    assert allowed(10)\n'],
+  ])('rejects an assertion inside %s', (_description, body) => {
+    const assertion = 'assert allowed(8)';
+    const source = testSource.replace('    assert allowed(10)\n', body);
+    const other = fixture(false, source);
+    other.evidence.links[0].assertion = {
+      path: 'tests/test_range.py',
+      line: source.split('\n').findIndex((line) => line.trim() === assertion) + 1,
+      text: assertion,
+    };
+    const g = evaluate(model, expected, other.evidence, other.snapshot, other.root, false).gates;
+    expect(g.metrics.Cov_req).toBe(0);
+    expect(g.errors.join()).toContain(`Assertion is outside reported test ${testId}`);
+  });
+  it('distinguishes class methods with the same test name and accepts parameterized IDs', () => {
+    const source = `class TestLower:
+    def test_limit(self):
+        assert allowed(1)
+
+class TestUpper:
+    def test_limit(self):
+        assert allowed(10)
+`.split('\n');
+    const test = 'tests.test_range.TestUpper::test_limit[value::10]';
+    expect(pythonTestContext(source, 7, test, 'test_range')).toContain('assert allowed(10)');
+    expect(pythonTestContext(source, 3, test, 'test_range')).toBeUndefined();
   });
   it(
     'replays a detached Ed25519 assessment through the CLI and rejects a tampered answer',
