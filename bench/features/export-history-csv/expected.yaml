@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "repo": "minibank",
+  "feature": "export-history-csv",
+  "requirements": [
+    {
+      "id": "REQ-CSV-01",
+      "description": "Представление",
+      "scenarios": [
+        {
+          "id": "SCN-CSV-01.1",
+          "description": "У существующего счёта ответ 200, media type `text/csv`, UTF-8 без BOM, разделитель запятая, строки завершаются CRLF по RFC 4180. Первая строка всегда `id,created_at,source,destination,amount,type`."
+        },
+        {
+          "id": "SCN-CSV-01.2",
+          "description": "Пустая история состоит из одной строки заголовков. У неизвестного счёта 404 с JSON `{\"error\":{\"code\":\"account_not_found\"}}`."
+        },
+        {
+          "id": "SCN-CSV-01.3",
+          "description": "Строка содержит id операции как десятичное целое, created_at в UTC с суффиксом Z, буквальные идентификаторы счетов, целую сумму и направление относительно выбранного счёта; применяется стандартное CSV-экранирование (например ID `shop,1`)."
+        }
+      ]
+    },
+    {
+      "id": "REQ-CSV-02",
+      "description": "Выбор операций",
+      "scenarios": [
+        {
+          "id": "SCN-CSV-02.1",
+          "description": "Печатать каждую связанную операцию ровно один раз, по целому id по возрастанию. Чужие переводы исключены."
+        },
+        {
+          "id": "SCN-CSV-02.2",
+          "description": "Необязательный query `type=incoming|outgoing` отбирает соответствующее направление; неизвестное значение — 422 `invalid_export_query`."
+        },
+        {
+          "id": "SCN-CSV-02.3",
+          "description": "Необязательные `from` и `to` — даты YYYY-MM-DD включительно по UTC, обе независимы и сочетаются с type; неверная дата или обратный период дают 422 `invalid_export_query`. Формат всех ошибок тот же, что в SCN-CSV-01.2."
+        }
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "1.1",
+      "description": "Выбор операций",
+      "requirements": [
+        "REQ-CSV-02"
+      ]
+    },
+    {
+      "id": "1.2",
+      "description": "Фильтры",
+      "requirements": [
+        "REQ-CSV-02"
+      ]
+    },
+    {
+      "id": "1.3",
+      "description": "Сериализация",
+      "requirements": [
+        "REQ-CSV-01"
+      ]
+    },
+    {
+      "id": "1.4",
+      "description": "HTTP-ответ",
+      "requirements": [
+        "REQ-CSV-01",
+        "REQ-CSV-02"
+      ]
+    },
+    {
+      "id": "1.5",
+      "description": "Проверка границ",
+      "requirements": [
+        "REQ-CSV-01",
+        "REQ-CSV-02"
+      ]
+    }
+  ]
+}
