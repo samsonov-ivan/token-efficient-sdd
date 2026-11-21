@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   appendFileSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -16,6 +17,8 @@ import { executeBaseline, hashBaselineAssets } from './baseline.js';
 import { meterRun } from './meter.js';
 import { parseArgs } from 'node:util';
 import { gates } from './gates.js';
+import { goCatalog, smokeReceipt, validSubscriptionLedger, verifySmoke } from './harness/go.js';
+import { startUsageRelay } from './harness/relay.js';
 import { evaluate, restoreFinal } from './harness/evaluate.js';
 import {
   activeOwner,
@@ -110,6 +113,7 @@ function initial(
     pair_id: slot.pair,
     series_id: plan.id,
     experiment: plan.experiment,
+    purpose: plan.goSmoke ? 'go-smoke' : plan.dry ? 'replay' : 'feature',
     feature_id: plan.feature,
     change_id: plan.feature,
     dry_run: plan.dry,
@@ -135,13 +139,19 @@ function initial(
     finished_at: null as string | null,
     final_commit: null as string | null,
     stages: [] as StageRecord[],
-    prices: null,
+    prices: null as Record<string, unknown> | null,
     gates: null as Record<string, unknown> | null,
     hidden: null as Record<string, unknown> | null,
     notes: [] as string[],
     prior_run_id: prior,
     isolation: { engine: image ? 'docker' : 'offline-replay', image, root: null as string | null },
-    metering: { title_disabled: true },
+    metering: {
+      title_disabled: true,
+      relay_required: plan.go && (!plan.dry || !!plan.fixture),
+      allowed_billing_sources: plan.go ? ['go', 'go-plus'] : undefined,
+      max_balance_charge: plan.go ? 0 : undefined,
+      plugin_sha256: null as string | null,
+    },
     accepted: false,
     pipeline_complete: false,
     assessment_sha256: null as string | null,
@@ -247,7 +257,56 @@ function stageWriter(m: Manifest, runDir: string, request: Invocation, start: st
 
 async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, root: string) {
   const env = runnerEnvironment(root);
-  createSettings(env, m.model, plan.dry ? null : plan.endpoint, plan.limits);
+  let relay: Awaited<ReturnType<typeof startUsageRelay>> | undefined;
+  const closeRelay = async () => {
+    if (relay) {
+      const active = relay;
+      relay = undefined;
+      await active.close();
+    }
+  };
+  if (plan.go && (!plan.dry || plan.fixture)) {
+    const info = plan.fixture
+      ? {
+          model: m.model,
+          prices: null,
+          limits: null,
+          endpoint: plan.fixture,
+          catalog: 'synthetic-loopback',
+        }
+      : await goCatalog(m.model);
+    m.prices = info.prices;
+    const plugin = join(plan.project, 'packages/opencode-plugin/dist/index.js');
+    const plugins = join(env.OPENCODE_CONFIG_DIR, 'plugins');
+    mkdirSync(plugins, { recursive: true });
+    copyFileSync(plugin, join(plugins, 'frugal-correlation.js'));
+    m.metering.plugin_sha256 = hashTree(plugin);
+    env.FRUGAL_USAGE_CORRELATION = '1';
+    writeJson(join(runDir, 'go-preflight.json'), {
+      ...info,
+      billing_setting_evidence: 'docs/OPENCODE_GO_HANDOFF.md',
+      max_balance_charge: 0,
+    });
+    relay = plan.fixture
+      ? await startUsageRelay({ runDir, model: m.model, fixture: true, upstream: plan.fixture })
+      : await startUsageRelay({
+          runDir,
+          model: m.model,
+          apiKey: process.env.OPENCODE_API_KEY ?? '',
+        });
+    try {
+      createSettings(
+        env,
+        m.model,
+        `http://host.docker.internal:${relay.port}/v1`,
+        info.limits,
+        true,
+      );
+    } catch (error) {
+      await closeRelay();
+      throw error;
+    }
+  } else createSettings(env, m.model, plan.dry ? null : plan.endpoint, plan.limits);
   const c = m.isolation.image ? new Container(root, repo, env, m.isolation.image, m.run_id) : null;
   const localEnv = { ...env, PATH: process.env.PATH, ...gitAuthor };
   const invokeTool = (name: string, args: string[]) =>
@@ -323,7 +382,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       const writer = stageWriter(m, runDir, request, now());
       if (!request.args.includes('--title')) throw new Error('Missing fixed session title');
       let result: Result;
-      if (plan.dry) {
+      if (plan.dry && !plan.fixture) {
         result = replay(repo, plan.feature, runDir, m.run_id, request);
         for (const line of result.stdout.trimEnd().split('\n')) writer.line(line, false);
       } else {
@@ -332,7 +391,12 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
           ['timeout', '--kill-after=10s', `${String(plan.timeout)}s`, 'opencode', ...request.args],
           {
             network: true,
-            credentials: plan.endpoint ? ['FRUGAL_PROVIDER_API_KEY'] : credentialKeys(m.provider),
+            credentials: relay
+              ? []
+              : plan.endpoint
+                ? ['FRUGAL_PROVIDER_API_KEY']
+                : credentialKeys(m.provider),
+            secretEnv: relay ? { FRUGAL_RELAY_TOKEN: relay.token } : undefined,
             onLine: writer.line,
           },
         );
@@ -347,6 +411,39 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       if (interrupted) throw new Error('Interrupted during stage');
       return result;
     };
+    if (plan.goSmoke && (!plan.dry || plan.fixture)) {
+      const r = await invoke({
+        stage: 'verify',
+        args: [
+          'run',
+          '--format',
+          'json',
+          '--model',
+          m.model,
+          '--title',
+          'Frugal Go smoke',
+          '--',
+          'Reply with the single word ready. No tools.',
+        ],
+      });
+      await checked(Promise.resolve(r));
+      await closeRelay();
+      if (!c) throw new Error('Go smoke needs an isolated Docker performer');
+      await closeStorage(c, root, runDir);
+      writeJson(join(runDir, 'manifest.json'), m);
+      const usage = await meterRun(runDir);
+      if (
+        !usage.complete ||
+        !usage.call_count ||
+        usage.cost !== 0 ||
+        !validSubscriptionLedger(join(runDir, 'raw/relay.jsonl'))
+      )
+        throw new Error('Go smoke billing or token reconciliation incomplete');
+      m.final_commit = plan.pin;
+      m.status = 'complete';
+      m.notes.push('Subscription smoke; no feature implementation or quality acceptance.');
+      return;
+    }
     await executeBaseline({
       repo,
       configDir: env.OPENCODE_CONFIG_DIR,
@@ -358,6 +455,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       invoke,
       snapshot,
     });
+    await closeRelay();
     const bundle = join(root, 'tmp', `final-${randomUUID()}.bundle`);
     const finalGit = (args: string[]) =>
       c
@@ -414,6 +512,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
     m.status = 'complete';
     m.accepted = !plan.dry;
   } catch (error) {
+    await closeRelay().catch((e) => m.notes.push(`Relay finalization failed: ${String(e)}`));
     m.status = interrupted ? 'interrupted' : 'failed';
     m.notes.push(error instanceof Error ? error.message : String(error));
     if (c) {
@@ -439,6 +538,13 @@ export async function run(argv: string[]): Promise<number> {
   const plan = parsePlan(argv);
   const temp = realpathSync(tmpdir());
   if (childOf(realpathSync(plan.project), temp)) throw new Error('TMPDIR is inside project');
+  if (plan.go && !plan.dry) {
+    if (!process.env.OPENCODE_API_KEY)
+      throw new Error(
+        'OpenCode Go requires OPENCODE_API_KEY on the host. No provider request sent.',
+      );
+    if (!plan.goSmoke) verifySmoke(plan.out, plan.requested, plan.sha);
+  }
   const image = plan.image ? await Container.imageID(plan.image) : null;
   const assetsHash = await hashBaselineAssets(join(plan.project, 'assets'));
   // The trusted pinned source alone supplies effective run settings. Build this clean copy before any model executes.
@@ -461,7 +567,9 @@ export async function run(argv: string[]): Promise<number> {
   }
   bindInputs(
     join(plan.out, '.series', `${plan.id}.json`),
-    digest(JSON.stringify([shared, plan.dry, plan.slots, plan.experiment, plan.budget])),
+    digest(
+      JSON.stringify([shared, plan.dry, plan.slots, plan.experiment, plan.budget, plan.goSmoke]),
+    ),
   );
   let successful = true;
   for (const slot of plan.slots) {
@@ -528,8 +636,21 @@ export async function run(argv: string[]): Promise<number> {
       );
       if (m.status !== 'complete') {
         successful = false;
+        if (plan.go && !plan.dry && !validSubscriptionLedger(join(dir, 'raw/relay.jsonl'))) {
+          writeJson(smokeReceipt(plan.out, m.model, plan.sha), {
+            blocked_run: id,
+            reason:
+              'Quota or subscription metering unconfirmed. Run a new live --go-smoke after repair or quota reset.',
+          });
+          return 1;
+        }
         if (m.status === 'interrupted' || (!m.pipeline_complete && !m.stages.length)) return 1;
       }
+      if (plan.goSmoke && !plan.dry && m.status === 'complete')
+        writeJson(smokeReceipt(plan.out, m.model, plan.sha), {
+          run_id: id,
+          ledger_hash: hashTree(join(dir, 'raw/relay.jsonl')),
+        });
       complete = true;
     }
   }

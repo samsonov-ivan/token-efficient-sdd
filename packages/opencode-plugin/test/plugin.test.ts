@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import plugin from '../src/index.js';
+import type { Hooks } from '@opencode-ai/plugin';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -11,6 +12,22 @@ describe('passive plugin', () => {
     vi.stubEnv('FRUGAL_PLUGIN_LOAD_LOG', '');
     expect(await plugin.server()).toEqual({});
     expect(plugin.setup()).toBeUndefined();
+  });
+
+  it('adds correlation metadata for a provider request only when enabled', async () => {
+    vi.stubEnv('FRUGAL_USAGE_CORRELATION', '1');
+    const headers: Record<string, string> = { existing: 'retained' };
+    const hook = (await plugin.server())['chat.headers'];
+    if (!hook) throw new Error('Missing correlation hook');
+    const input = { sessionID: 'ses_child', message: { id: 'msg_user' } } as Parameters<
+      NonNullable<Hooks['chat.headers']>
+    >[0];
+    await hook(input, { headers });
+    expect(headers).toEqual({
+      existing: 'retained',
+      'x-frugal-session-id': 'ses_child',
+      'x-frugal-message-id': 'msg_user',
+    });
   });
 
   it('records the invoked host entry point when requested', async () => {

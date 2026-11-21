@@ -37,6 +37,9 @@ export function parsePlan(argv: string[]) {
       'output-limit': { type: 'string' },
       calibration: { type: 'boolean' },
       timeout: { type: 'string' },
+      'go-smoke': { type: 'boolean' },
+      'usage-relay': { type: 'boolean' },
+      'relay-fixture': { type: 'string' },
     },
   });
   const project = resolve(v.project ?? git(process.cwd(), ['rev-parse', '--show-toplevel']));
@@ -105,6 +108,32 @@ export function parsePlan(argv: string[]) {
     ])
   )
     throw new Error('Live execution requires committed code, prompts and benchmark inputs');
+  const fixture = v['relay-fixture'] ?? null;
+  if (fixture) {
+    const u = new URL(fixture);
+    if (
+      !dry ||
+      !v['go-smoke'] ||
+      !v.image ||
+      u.protocol !== 'http:' ||
+      u.hostname !== '127.0.0.1' ||
+      !u.port ||
+      u.username ||
+      u.password ||
+      u.hash ||
+      u.search
+    )
+      throw new Error(
+        'Relay fixture requires a loopback HTTP port, --dry-run --go-smoke and --image',
+      );
+  }
+  const go = requested.startsWith('opencode-go/');
+  if (v['go-smoke'] && (!go || runs !== 1 || mode !== 'baseline'))
+    throw new Error('--go-smoke requires one baseline run on an opencode-go model');
+  if (v['usage-relay'] && !go)
+    throw new Error('The subscription usage relay requires an opencode-go model');
+  if (go && endpoint)
+    throw new Error('OpenCode Go uses its fixed official upstream, omit --endpoint');
   if (!dry && requested.startsWith('mock/')) throw new Error('Mock model requires --dry-run');
   if (!dry && runs * (mode === 'paired' ? 2 : 1) > 2) {
     const total =
@@ -141,7 +170,8 @@ export function parsePlan(argv: string[]) {
     'hidden_tests',
   );
   const oracleHash = existsSync(oracle) ? hashTree(oracle) : 'unavailable';
-  if (!dry && oracleHash === 'unavailable') throw new Error('Missing frozen hidden oracle');
+  if (!dry && !v['go-smoke'] && oracleHash === 'unavailable')
+    throw new Error('Missing frozen hidden oracle');
   const flags = (v.flag ?? []).map((f) => slug(f, 'optimization flag')).sort();
   if (mode === 'ablation' && !flags.length) throw new Error('--mode ablation requires --flag');
   if (mode === 'baseline' && flags.length) throw new Error('B0 requires all flags off');
@@ -160,6 +190,9 @@ export function parsePlan(argv: string[]) {
     endpoint,
     limits,
     timeout,
+    go,
+    fixture,
+    goSmoke: !!v['go-smoke'],
     calibration: !!v.calibration || experiment === 'E0' || experiment === 'E0-s',
     budget,
     mode,
@@ -181,7 +214,7 @@ export function parsePlan(argv: string[]) {
     requirementsHash: digest(requirements),
     expectedHash: hashTree(join(inputs, 'expected.yaml')),
     requested,
-    model: dry ? 'mock/replay' : requested,
+    model: dry && !fixture ? 'mock/replay' : requested,
     sha: git(project, ['rev-parse', 'HEAD']),
   };
 }
