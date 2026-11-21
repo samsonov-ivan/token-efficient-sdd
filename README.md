@@ -2,6 +2,8 @@
 
 **Сколько токенов можно сэкономить на одной законченной фиче?** Команда разрабатывает `frugal` для кейса СберТеха на хакатоне Студсовета ФПМИ. Сравниваем обычный и оптимизированный процессы OpenSpec + opencode на одинаковых требованиях, модели и провайдере. В обеих ветках остаются спецификация, реализация, LLM-ревью и проверка. Экономию подтверждают записи вызовов, а качество — тесты и связи между требованиями, задачами и кодом.
 
+Запись для просмотра длится 1 минуту 57 секунд. В архиве рядом с видео лежат отчёт и исходные события открытой демонстрационной пары. [Скачать комплект](docs/collaboration/defense-preview.zip) · [Проверить решение по пяти критериям жюри](docs/JURY.md)
+
 ## Запуск прототипа
 
 Из корня checkout используйте Node из `.node-version`, Python ≥3.11, uv, Git и sqlite3. Парная репетиция запускается без ключей и внешней модели. Новый каталог сохраняет исходные события, отчёт и дашборд.
@@ -11,7 +13,7 @@ npm ci
 npm run build
 demo_dir=$(mktemp -d)
 node_modules/.bin/frugal run --mode paired --feature add-transfer-limits \
-  --dry-run --series prototype --out "$demo_dir/runs"
+  --flag session_per_task --dry-run --series prototype --out "$demo_dir/runs"
 node scripts/replay.mjs "$demo_dir/runs"
 node_modules/.bin/frugal report "$demo_dir/runs" --out "$demo_dir/report"
 ls "$demo_dir/report"
