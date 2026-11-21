@@ -1,0 +1,31 @@
+{
+  "name": "frugal-sdd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.20.0"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "lint": "biome lint packages",
+    "format": "biome format --write packages",
+    "setup:v2": "npm ci --prefix tools/opencode-v2",
+    "test:analysis": "uv run --locked --project analysis pytest analysis/tests",
+    "lint:analysis": "uv run --locked --project analysis ruff check analysis"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.5",
+    "@fission-ai/openspec": "2.1.1",
+    "@opencode-ai/plugin": "1.19.6",
+    "@types/node": "22.19.1",
+    "ajv": "8.20.0",
+    "opencode-ai": "1.19.6",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

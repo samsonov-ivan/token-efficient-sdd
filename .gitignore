@@ -6,3 +6,9 @@ node_modules/
 bench/runs/*
 !bench/runs/summary/
 !bench/runs/summary.*
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.tsbuildinfo

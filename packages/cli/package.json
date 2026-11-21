@@ -1,0 +1,23 @@
+{
+  "name": "frugal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "frugal": "bin/frugal.js"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.12.1",
+    "yaml": "2.8.2"
+  }
+}
