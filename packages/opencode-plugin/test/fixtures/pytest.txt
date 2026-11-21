@@ -1,0 +1,50 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0 -- /Library/Developer/CommandLineTools/usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /private/work/example
+collecting ... collected 14 items
+
+test_contract.py::test_positive_integer_preserves_value[0] PASSED        [  7%]
+test_contract.py::test_positive_integer_preserves_value[1] PASSED        [ 14%]
+test_contract.py::test_positive_integer_preserves_value[2] PASSED        [ 21%]
+test_contract.py::test_positive_integer_preserves_value[3] PASSED        [ 28%]
+test_contract.py::test_positive_integer_preserves_value[4] PASSED        [ 35%]
+test_contract.py::test_positive_integer_preserves_value[5] PASSED        [ 42%]
+test_contract.py::test_positive_integer_preserves_value[6] PASSED        [ 50%]
+test_contract.py::test_positive_integer_preserves_value[7] PASSED        [ 57%]
+test_contract.py::test_positive_integer_preserves_value[8] PASSED        [ 64%]
+test_contract.py::test_positive_integer_preserves_value[9] PASSED        [ 71%]
+test_contract.py::test_positive_integer_preserves_value[10] PASSED       [ 78%]
+test_contract.py::test_positive_integer_preserves_value[11] PASSED       [ 85%]
+test_contract.py::test_first FAILED                                      [ 92%]
+test_contract.py::test_second FAILED                                     [100%]
+
+=================================== FAILURES ===================================
+__________________________________ test_first __________________________________
+
+    def test_first():
+        warnings.warn("rounding π", UserWarning)
+>       assert 2 == 3
+E       assert 2 == 3
+
+test_contract.py:10: AssertionError
+_________________________________ test_second __________________________________
+
+    def test_second():
+>       assert "alpha" == "beta"
+E       AssertionError: assert 'alpha' == 'beta'
+E
+E         - beta
+E         + alpha
+
+test_contract.py:13: AssertionError
+=============================== warnings summary ===============================
+test_contract.py::test_first
+  /private/work/example/test_contract.py:9: UserWarning: rounding π
+    warnings.warn("rounding π", UserWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test_contract.py::test_first - assert 2 == 3
+FAILED test_contract.py::test_second - AssertionError: assert 'alpha' == 'beta'
+=================== 2 failed, 12 passed, 1 warning in 0.01s ====================
