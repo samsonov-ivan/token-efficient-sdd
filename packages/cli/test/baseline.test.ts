@@ -115,10 +115,27 @@ it('dispatches installed stock skills, uses full feedback and fresh same-model s
   await expect(executeBaseline(options)).rejects.toThrow('EEXIST');
 });
 
+it.each(['None', 'None found.', 'No blocking findings.'])(
+  'continues to verification after an explicit no-findings review: %s',
+  async (sentinel) => {
+    const answer = `Checked the limit and boundary tests.\nBLOCKING: ${sentinel}\nVERDICT: ACCEPT`;
+    const { options, requests } = await fixture(async ({ stage }) =>
+      stage === 'review' ? answer : undefined,
+    );
+    const result = await executeBaseline(options);
+    expect(requests.map((r) => r.stage)).toEqual(['spec', 'apply', 'review', 'verify']);
+    expect(result.reviews).toMatchObject([{ verdict: 'pass', summary: answer }]);
+  },
+);
+
 it.each([
   'VERDICT: ACCEPT',
   'Reviewed tests.\nVERDICT: ACCEPT\nVERDICT: CHANGES REQUESTED',
   'BLOCKING: Broken assertion\nVERDICT: ACCEPT',
+  'BLOCKING: None found. Broken assertion still fails.\nVERDICT: ACCEPT',
+  'BLOCKING: None found.\u2028Broken assertion still fails.\nVERDICT: ACCEPT',
+  'BLOCKING: None found.\nBLOCKING: Broken assertion\nVERDICT: ACCEPT',
+  'BLOCKING: None found.\nVERDICT: CHANGES REQUESTED',
   'Everything checked\nVERDICT: CHANGES REQUESTED',
   'I think the code is fine.',
 ])('rejects ambiguous, unsupported or contradictory review output: %s', async (answer) => {

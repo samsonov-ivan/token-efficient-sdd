@@ -255,7 +255,14 @@ function verdict(answer: string, stage: 'review' | 'verify') {
     throw new Error(`Invalid terminal ${stage} verdict`);
   }
   const pass = terminal === prefix + (isReview ? ' ACCEPT' : ' PASS');
-  if (isReview && normalized.some((line) => /^BLOCKING:\s*\S/i.test(line)) === pass) {
+  if (
+    isReview &&
+    normalized.some((line) => {
+      if (!/^BLOCKING:/i.test(line)) return false;
+      const finding = line.slice('BLOCKING:'.length).trim();
+      return Boolean(finding) && !/^(?:none(?: found)?|no blocking findings)\.?$/i.test(finding);
+    }) === pass
+  ) {
     throw new Error('Review verdict disagrees with blocking findings');
   }
   return pass;
