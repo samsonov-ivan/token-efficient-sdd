@@ -141,6 +141,7 @@ export function prepareRequest(
       'Review each required scenario against the actual design and implementation, including bounds, error behavior and cross-file constraints.',
       'Read the tracked file at the stated commit (git show COMMIT:PATH). Candidates are suggestions. Inspect the actual code, assertion, and passing test before accepting a link.',
       'Return version, request_sha256, final_commit, reviewer, semantic[{requirement,verdict,reason}] and links[{scenario,task,test,code:{path,line,text},assertion:{path,line,text}}].',
+      'For missing artifact IDs return aliases[{kind,path,text,parent?,id,reason}] matching missingIds exactly. For implicit requirement references in design/tasks cite artifact_links[{path,line,text,task?,refs,reason}]. Preserve each independent justification.',
       'A confirmed link missing a marker requires inferred:true and reason. Cite a discrepancy using verdict:fail. No hidden test contents are needed.',
     ],
   };
@@ -169,5 +170,12 @@ export function importAssessment(
     throw new Error('Assessment not bound to this request, reviewer and final commit');
   if (!Array.isArray(data.semantic) || !Array.isArray(data.links))
     throw new Error('Assessment missing semantic judgments or source links');
-  return { ...ev, semantic: data.semantic, links: data.links };
+  return {
+    ...ev,
+    semantic: data.semantic,
+    links: data.links,
+    aliases: data.aliases,
+    artifact_links: data.artifact_links,
+    exempt_tasks: data.exempt_tasks,
+  };
 }
