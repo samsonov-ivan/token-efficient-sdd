@@ -274,3 +274,128 @@ describe('offline reconciliation', () => {
     expect(calls(dir)[0].sources).toContain('raw/opencode.db#part/prt_first');
   });
 });
+
+function relayPair() {
+  const meta = {
+    id: 'transport-1',
+    ts: new Date(now).toISOString(),
+    session_id: 'ses_root',
+    user_id: 'user1',
+    agent: 'build',
+    requested_model: 'demo',
+  };
+  const usage = {
+    ...providerRow.usage,
+    cost: 0,
+    opencode: {
+      billing_source: 'go',
+      list_cost: 0.00023,
+      allowance: 0.00043,
+      tokens: {
+        input: 75,
+        output: 10,
+        reasoning: 2,
+        cache_read: 10,
+        cache_write_5m: 10,
+        cache_write_1h: 5,
+      },
+    },
+  };
+  return [
+    { ...meta, event: 'begin' },
+    {
+      ...meta,
+      event: 'end',
+      status: 200,
+      complete: true,
+      issues: [],
+      upstream_id: 'upstream-1',
+      model_id: 'demo',
+      usage,
+    },
+  ];
+}
+function relayRun(records: unknown[]) {
+  const dir = fixture();
+  const path = join(dir, 'raw/exports/first.json');
+  const exp = JSON.parse(readFileSync(path, 'utf8'));
+  Object.assign(exp.messages[0].info, { parentID: 'user1', agent: 'build' });
+  writeFileSync(path, JSON.stringify(exp));
+  const manifestPath = join(dir, 'manifest.json');
+  const m = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  m.metering = {
+    relay_required: true,
+    max_balance_charge: 0,
+    allowed_billing_sources: ['go', 'go-plus'],
+  };
+  writeFileSync(manifestPath, JSON.stringify(m));
+  writeFileSync(
+    join(dir, 'raw/relay.jsonl'),
+    `${records.map((row) => JSON.stringify(row)).join('\n')}\n`,
+  );
+  return dir;
+}
+
+describe('Go transport ledger', () => {
+  it('uses billed cache write breakdown and checks total, price, allowance, and original session stats separately', async () => {
+    const dir = relayRun(relayPair());
+    const result = await meterRun(dir);
+    expect(result.issues).toEqual([]);
+    expect(result).toMatchObject({
+      rpt: 110,
+      t_in: 75,
+      t_cache_write: 15,
+      cost: 0,
+      relay: { requests_with_usage: 1, relative_discrepancy: 0 },
+      opencode_billing: { list_cost: 0.00023, allowance: 0.00043, cache_write_reassignments: 1 },
+    });
+    expect(calls(dir)[0]).toMatchObject({
+      raw_ref: 'raw/relay.jsonl#L2',
+      source_schema: 'opencode-go-chat',
+      request_id: 'upstream-1',
+    });
+    expect(Object.keys(result.raw_sha256)).toContain('raw/relay.jsonl');
+  });
+  it.each([
+    'missing-response',
+    'duplicate',
+    'wrong-user',
+    'different-output',
+    'balance',
+    'charged',
+    'no-ledger',
+    'truncated',
+    'error',
+  ])('blocks %s', async (problem) => {
+    const [b, e] = relayPair();
+    const changed = structuredClone(e) as Record<string, unknown>;
+    let rows = [b, e] as unknown[];
+    if (problem === 'missing-response') rows = [b];
+    if (problem === 'duplicate') rows.push(e);
+    if (problem === 'wrong-user')
+      rows = [
+        { ...b, user_id: 'unrelated' },
+        { ...e, user_id: 'unrelated' },
+      ];
+    if (problem === 'different-output') {
+      const usage = structuredClone(providerRow.usage);
+      Object.assign(usage, { completion_tokens: 9, total_tokens: 109 });
+      changed.usage = usage;
+      rows = [b, changed];
+    }
+    if (problem === 'balance' || problem === 'charged') {
+      const adjusted = structuredClone(e.usage);
+      if (problem === 'balance') adjusted.opencode.billing_source = 'balance';
+      else adjusted.cost = 0.001;
+      rows = [b, { ...e, usage: adjusted }];
+    }
+    if (problem === 'error') rows = [b, { ...e, complete: false, issues: ['stream disconnected'] }];
+    const dir = relayRun(rows);
+    if (problem === 'truncated') appendFileSync(join(dir, 'raw/relay.jsonl'), '{');
+    if (problem === 'no-ledger') rmSync(join(dir, 'raw/relay.jsonl'));
+    const result = await meterRun(dir);
+    expect(result.issues.length).toBeGreaterThan(0);
+    expect(result.complete).toBe(false);
+    expect(result.rpt).toBeNull();
+  });
+});

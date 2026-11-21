@@ -32,6 +32,28 @@ export function normalize(schema: string, data: unknown): Tokens {
       reasoning = count(usage.reasoning);
       break;
     }
+    case 'opencode-go-chat': {
+      const ext = record(record(usage.opencode).tokens);
+      input = count(ext.input);
+      read = count(ext.cache_read);
+      write = count(count(ext.cache_write_5m) + count(ext.cache_write_1h));
+      reasoning = count(ext.reasoning);
+      output = count(count(ext.output) - reasoning);
+      const standard = normalize('openai-chat', usage);
+      if (
+        standard.t_in + standard.t_cache_read !== input + read + write ||
+        standard.t_out + standard.t_reasoning !== output + reasoning
+      )
+        throw new Error('OpenCode billing token totals differ from API usage');
+      const inDetail = record(usage.prompt_tokens_details ?? {});
+      const outDetail = record(usage.completion_tokens_details ?? {});
+      if (
+        (inDetail.cached_tokens != null && standard.t_cache_read !== read) ||
+        (outDetail.reasoning_tokens != null && standard.t_reasoning !== reasoning)
+      )
+        throw new Error('OpenCode billing token details differ from API usage');
+      break;
+    }
     case 'openai-chat': {
       const detailsIn = record(usage.prompt_tokens_details ?? {});
       const detailsOut = record(usage.completion_tokens_details ?? {});
