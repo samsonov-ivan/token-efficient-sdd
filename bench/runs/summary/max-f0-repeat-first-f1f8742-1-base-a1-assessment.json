@@ -1,0 +1,466 @@
+{
+  "version": 1,
+  "reviewer": "Frugal independent post-pipeline QA",
+  "run_id": "max-f0-repeat-first-f1f8742-1-base-a1",
+  "manifest_sha256": "4ab27984bf4315ad3085c7cc93b130e783c5b73b9cc8e7bdb9f3e415d838f364",
+  "request_sha256": "220abccc45a41fbcc640628e9db1239c02c592a3b85707e824bd9ccf05e81ad2",
+  "final_commit": "e2e11d806c8a4d6dea52f01eecf2ab57c0c6ab4f",
+  "final_tree": "aae9ac5e15edab1ee4299596540c8ef5ec58b753",
+  "semantic": [
+    {
+      "requirement": "REQ-LIM-01",
+      "verdict": "fail",
+      "reason": "Reproduction on a DB populated exclusively through the base HTTP API using four successful same-day transfers yielded HTTP 500 upon upgrade when the next transfer should return 409 daily_limit. repository.py:66 uses a signed SQLite SUM that overflows before service.py:101 can check the limit. A valid last-calendar-day clock also raises a date overflow at service.py:94."
+    },
+    {
+      "requirement": "REQ-LIM-02",
+      "verdict": "pass",
+      "reason": "service.py:81–89 resolves both sides, rejects self-transfers and closed accounts before any ledger updates, and the final public cases verify the exact conflict codes and unchanged balances and history."
+    },
+    {
+      "requirement": "REQ-LIM-03",
+      "verdict": "pass",
+      "reason": "service.py:69–80 and 115–123 read or write the original response in the same transaction as the ledger operation. storage.py:47 and 72 provide sender-scoped uniqueness and serialization. Public replays, conflicts, sender independence, keyless calls, failures, concurrent calls and reopening confirm behavior."
+    },
+    {
+      "requirement": "REQ-LIM-04",
+      "verdict": "pass",
+      "reason": "service.py:104–114 debits the sender and credits only on immediate completion. The guarded write transaction at service.py:130–136 credits pending recipients once, and repository.py:150–177 preserves identity fields. Public checks cover both threshold sides, credit, identity, unknown transfers and concurrent confirmation."
+    },
+    {
+      "requirement": "REQ-LIM-05",
+      "verdict": "fail",
+      "reason": "Requests on an initialized account returned HTTP 500 for valid history parameters to=9999-12-31 and offset=9223372036854775808. service.py:151 adds a day beyond the representable date, and repository.py:215 binds a valid nonnegative offset beyond SQLite signed INTEGER range. Normal filters and paging tests passed. In the pinned Linux image, a transfer on 0001-01-01 is stored with an unpadded year by models.py:44 and excluded from a valid same-day history filter that uses padded ISO dates at service.py:149–151."
+    },
+    {
+      "requirement": "REQ-LIM-06",
+      "verdict": "pass",
+      "reason": "service.py:51–64 writes rule and audit snapshot in one transaction only when rule values differ. repository.py:113–127 verifies a known kind and returns per-kind rows ordered by ID. Final public tests confirm ordered before/after data, suppression, persistence and unknown-kind behavior."
+    },
+    {
+      "requirement": "REQ-TXN-02",
+      "verdict": "pass",
+      "reason": "The pinned base public regression suite passed unchanged. repository.py:150–156 retrieves the saved record by integer ID, existing UTC normalization is retained in models.py:40–44, and the history query limits results to parties with descending integer IDs. The new filter boundary defects are adjudicated under REQ-LIM-05."
+    }
+  ],
+  "links": [
+    {
+      "scenario": "SCN-LIM-01.1",
+      "task": "1.1",
+      "test": "tests.test_limits::test_1_1_defaults_are_seeded_for_both_kinds",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 23,
+        "text": "assert stored_rules(db_path, \"personal\") == {"
+      },
+      "code": {
+        "path": "src/minibank/storage.py",
+        "line": 49,
+        "text": "INSERT OR IGNORE INTO limit_rules (kind, per_transfer, daily, review_threshold)"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-01.1",
+      "task": "1.2",
+      "test": "tests.test_limits::test_limits_rules_replacement_survives_reopen",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 113,
+        "text": "assert reopened.get(\"/limits/personal\").json() == {\"kind\": \"personal\", **body}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 55,
+        "text": "after = repository.replace_limit_rules(connection, kind, **values)"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-01.2",
+      "task": "1.2",
+      "test": "tests.test_limits::test_limits_rules_unknown_kind_is_rejected",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 146,
+        "text": "assert response.json() == {\"error\": {\"code\": \"unknown_kind\"}}"
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 79,
+        "text": "raise DomainError(404, \"unknown_kind\")"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-01.2",
+      "task": "1.2",
+      "test": "tests.test_limits::test_limits_rules_invalid_bodies_keep_previous_values[body5]",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 137,
+        "text": "assert response.json() == {\"error\": {\"code\": \"invalid_limits\"}}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 21,
+        "text": "raise DomainError(422, \"invalid_limits\")"
+      },
+      "inferred": true,
+      "reason": "The bool-valued parameter row receives the required 422 error code and the next assertion checks the original rules. This passed parameterized test exercises the body-validation branch of task 1.2."
+    },
+    {
+      "scenario": "SCN-LIM-01.3",
+      "task": "1.3",
+      "test": "tests.test_limits::test_per_transfer_limit_rejects_above_and_accepts_equal",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 172,
+        "text": "assert response.json() == {\"error\": {\"code\": \"per_transfer_limit\"}}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 89,
+        "text": "raise DomainError(409, \"per_transfer_limit\")"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-01.4",
+      "task": "1.4",
+      "test": "tests.test_limits::test_daily_limit_accumulates_and_rejects_excess",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 253,
+        "text": "assert response.json() == {\"error\": {\"code\": \"daily_limit\"}}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 102,
+        "text": "raise DomainError(409, \"daily_limit\")"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-02.1",
+      "task": "1.3",
+      "test": "tests.test_limits::test_forbidden_self_transfer_leaves_ledger_unchanged",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 202,
+        "text": "assert response.json() == {\"error\": {\"code\": \"self_transfer\"}}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 84,
+        "text": "raise DomainError(409, \"self_transfer\")"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-02.2",
+      "task": "1.3",
+      "test": "tests.test_limits::test_forbidden_closed_destination_leaves_ledger_unchanged",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 215,
+        "text": "assert response.json() == {\"error\": {\"code\": \"account_closed\"}}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 86,
+        "text": "raise DomainError(409, \"account_closed\")"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-03.1",
+      "task": "1.5",
+      "test": "tests.test_limits::test_idempotency_replays_original_response",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 357,
+        "text": "assert second.json() == first.json()"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 80,
+        "text": "return json.loads(cached[\"response_json\"])"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-03.2",
+      "task": "1.5",
+      "test": "tests.test_limits::test_idempotency_keys_are_scoped_to_the_sender",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 395,
+        "text": "assert first.json()[\"id\"] != second.json()[\"id\"]"
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 42,
+        "text": "\"SELECT * FROM idempotency_keys WHERE sender = ? AND key = ?\", (sender, key)"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-03.2",
+      "task": "1.5",
+      "test": "tests.test_limits::test_idempotency_conflict_for_changed_request[bob-101]",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 376,
+        "text": "assert response.json() == {\"error\": {\"code\": \"idempotency_conflict\"}}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 79,
+        "text": "raise DomainError(409, \"idempotency_conflict\")"
+      },
+      "inferred": true,
+      "reason": "The test submits the same sender, destination and key with a changed amount and asserts the exact idempotency_conflict response. It is the conflict portion of task 1.5."
+    },
+    {
+      "scenario": "SCN-LIM-03.3",
+      "task": "1.6",
+      "test": "tests.test_limits::test_idempotency_concurrent_repeats_create_one_transfer",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 433,
+        "text": "assert len(history_items(reopened, \"alice\")) == 1"
+      },
+      "code": {
+        "path": "src/minibank/storage.py",
+        "line": 72,
+        "text": "connection.execute(\"BEGIN IMMEDIATE\" if write else \"BEGIN\")"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-04.1",
+      "task": "1.7",
+      "test": "tests.test_limits::test_pending_review_above_threshold_debits_sender_only",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 481,
+        "text": "assert balances(client, \"alice\", \"bob\") == {\"alice\": 14000, \"bob\": 100}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 110,
+        "text": "if status == \"completed\":"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-04.2",
+      "task": "1.8",
+      "test": "tests.test_limits::test_confirm_completes_pending_transfer_once",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 528,
+        "text": "assert balances(client, \"alice\", \"bob\") == {\"alice\": 14000, \"bob\": 6100}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 135,
+        "text": "repository.credit(connection, record[\"destination\"], record[\"amount\"])"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-04.3",
+      "task": "1.8",
+      "test": "tests.test_limits::test_confirm_rejects_completed_and_unknown_transfers",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 543,
+        "text": "assert response.json() == {\"error\": {\"code\": \"already_completed\"}}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 134,
+        "text": "raise DomainError(409, \"already_completed\")"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-05.1",
+      "task": "1.10",
+      "test": "tests.test_limits::test_history_pagination_envelope_and_descending_pages",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 672,
+        "text": "assert [item[\"id\"] for item in body[\"items\"]] == ["
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 214,
+        "text": "ORDER BY id DESC LIMIT ? OFFSET ?\"\"\","
+      }
+    },
+    {
+      "scenario": "SCN-LIM-05.2",
+      "task": "1.9",
+      "test": "tests.test_limits::test_history_filters_date_range_is_inclusive",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 605,
+        "text": "assert history_ids("
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 151,
+        "text": "f\"{(date_to + timedelta(days=1)).isoformat()}T00:00:00Z\""
+      }
+    },
+    {
+      "scenario": "SCN-LIM-05.3",
+      "task": "1.10",
+      "test": "tests.test_limits::test_history_invalid_query_returns_422_without_ledger_changes",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 725,
+        "text": "assert response.json() == {\"error\": {\"code\": \"invalid_history_query\"}}"
+      },
+      "code": {
+        "path": "src/minibank/api.py",
+        "line": 56,
+        "text": "raise DomainError(422, \"invalid_history_query\")"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-06.1",
+      "task": "1.11",
+      "test": "tests.test_limits::test_audit_records_successful_changes_in_insertion_order",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 739,
+        "text": "assert items[0][\"before\"] == PERSONAL_DEFAULTS"
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 122,
+        "text": "\"before\": json.loads(row[\"before_json\"]),"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-06.2",
+      "task": "1.11",
+      "test": "tests.test_limits::test_audit_skips_unchanged_and_failed_replacements",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 768,
+        "text": "assert client.get(\"/limits/personal/audit\").json() == {\"items\": []}"
+      },
+      "code": {
+        "path": "src/minibank/service.py",
+        "line": 56,
+        "text": "if after != before:"
+      }
+    },
+    {
+      "scenario": "SCN-LIM-06.3",
+      "task": "1.11",
+      "test": "tests.test_limits::test_audit_is_per_kind_and_persists_after_reopen",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 787,
+        "text": "assert [item[\"after\"] for item in personal_items] == ["
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 117,
+        "text": "WHERE kind = ? ORDER BY id\"\"\","
+      }
+    },
+    {
+      "scenario": "SCN-TXN-02.1",
+      "task": "1.10",
+      "test": "tests.test_limits::test_history_pagination_envelope_and_descending_pages",
+      "assertion": {
+        "path": "tests/test_limits.py",
+        "line": 672,
+        "text": "assert [item[\"id\"] for item in body[\"items\"]] == ["
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 214,
+        "text": "ORDER BY id DESC LIMIT ? OFFSET ?\"\"\","
+      }
+    },
+    {
+      "scenario": "SCN-TXN-02.2",
+      "task": "1.10",
+      "test": "tests.test_transfers::test_history_survives_a_new_app_instance",
+      "assertion": {
+        "path": "tests/test_transfers.py",
+        "line": 135,
+        "text": "assert reopened.get(f\"/transfers/{record['id']}\").json() == record"
+      },
+      "code": {
+        "path": "src/minibank/repository.py",
+        "line": 156,
+        "text": "return dict(row)"
+      },
+      "inferred": true,
+      "reason": "Task 1.10 requires its named history regression slice. The existing test reopens the database and asserts the exact pre-restart record on both history and direct transfer lookup."
+    }
+  ],
+  "artifact_links": [
+    {
+      "path": "openspec/changes/add-transfer-limits/design.md",
+      "line": 36,
+      "text": "`GET/PUT /limits/{kind}/...` accept `kind: str`; an absent row returns `404 unknown_kind` instead of FastAPI's 422 path validation (SCN-LIM-01.2, SCN-LIM-06.3). The PUT body is read as a raw dict and validated as exactly three strict positive integers with `review_threshold <= per_transfer <= daily`; any missing key, extra key, bool, non-integer, zero or negative value raises `422 invalid_limits` through the existing `DomainError` handler. This is chosen over a Pydantic model because a model failure would emit FastAPI's default 422 body rather than the required `{\"error\":{\"code\":\"invalid_limits\"}}` (SCN-LIM-01.2). PUT replaces all three columns and writes the audit row in the same write transaction (SCN-LIM-01.1, SCN-LIM-06.1, SCN-LIM-06.3).",
+      "refs": [
+        "REQ-LIM-01"
+      ],
+      "reason": "The decision specifies sender-kind rules, required limits input, replacement, and preserved domain error shape."
+    },
+    {
+      "path": "openspec/changes/add-transfer-limits/design.md",
+      "line": 40,
+      "text": "`Ledger.transfer` keeps one write session and performs checks in this order: (1) idempotency lookup/conflict, (2) source and destination existence, (3) self-transfer, (4) source-closed and destination-closed, (5) sender-kind `per_transfer`, (6) UTC-day `daily` sum, (7) sender debit, (8) recipient credit only when not in review, (9) insert transfer with `completed` or `pending_review`, (10) store the idempotency response. The idempotency lookup precedes validation so a replayed key returns the cached 201 even if the account state later differs (SCN-LIM-03.1). Each rejection occurs before any debit/insert, so balances, history and daily usage stay intact (SCN-LIM-01.3, SCN-LIM-01.4, SCN-LIM-02.1, SCN-LIM-02.2). When several violations coexist, this documented order decides which single error code is returned.",
+      "refs": [
+        "REQ-LIM-02"
+      ],
+      "reason": "The transfer decision explicitly describes self-transfers, closed destinations, and stopping before any ledger write."
+    },
+    {
+      "path": "openspec/changes/add-transfer-limits/design.md",
+      "line": 48,
+      "text": "`idempotency_keys` is keyed by `(sender, key)` and stores destination, amount and the exact 201 JSON. Lookup within the write transaction compares destination and amount: equal returns the cached response, different raises `409 idempotency_conflict` (SCN-LIM-03.1, SCN-LIM-03.2). The cache is written only after the transfer succeeds, so a failed request reserves nothing (SCN-LIM-03.3). Because writes already use `BEGIN IMMEDIATE`, simultaneous repeats serialize: the first commits the row, the second reads it; restart persistence comes from SQLite (SCN-LIM-03.3). A missing or empty header means no lookup and every success creates a new row (SCN-LIM-03.2).",
+      "refs": [
+        "REQ-LIM-03"
+      ],
+      "reason": "The decision describes sender-scoped responses, exact replays, payload conflicts, transaction serialization, and restart persistence."
+    },
+    {
+      "path": "openspec/changes/add-transfer-limits/design.md",
+      "line": 52,
+      "text": "A transfer is `pending_review` only when `amount > review_threshold`; equality completes immediately (SCN-LIM-04.1). For pending rows the sender is debited and the recipient untouched at creation. `POST /transfers/{id}/confirm` opens a write transaction, loads the row, raises `404 transfer_not_found` or `409 already_completed` as appropriate, credits the recipient, updates the status to `completed`, and returns the reloaded record, leaving identity fields and `created_at` unchanged (SCN-LIM-04.2, SCN-LIM-04.3). Serialization by `BEGIN IMMEDIATE` makes the credit happen exactly once under concurrent confirmations.",
+      "refs": [
+        "REQ-LIM-04"
+      ],
+      "reason": "The decision specifies the review threshold, immediate debit, the confirmation transaction, and confirmation errors."
+    },
+    {
+      "path": "openspec/changes/add-transfer-limits/design.md",
+      "line": 56,
+      "text": "`GET /accounts/{id}/history` parses `offset`, `limit`, `from`, `to`, `type` and `status` manually from the request query string so every validation failure returns `422 invalid_history_query` (SCN-LIM-05.3). Dates are `YYYY-MM-DD`; `from` lower bound is `T00:00:00Z` and `to` upper bound is exclusive at the next midnight, making both bounds inclusive (SCN-LIM-05.2). Direction maps to `destination = account` or `source = account`; status maps to the stored value; all predicates combine with AND. The repository runs a COUNT with the same predicates for `total`, then a descending-ID SELECT with `LIMIT/OFFSET`, returning `{items, total, offset, limit}` with defaults 0 and 50 (SCN-LIM-05.1, SCN-LIM-05.2). Existing callers that read `items` keep working.",
+      "refs": [
+        "REQ-LIM-05",
+        "REQ-TXN-02"
+      ],
+      "reason": "The decision describes filtered paginated operation history, preservation of the items portion, and ordering."
+    },
+    {
+      "path": "openspec/changes/add-transfer-limits/design.md",
+      "line": 60,
+      "text": "Every successful PUT that changes at least one value inserts `before_json` and `after_json` serialized from complete rule dicts (including `kind`) plus `at = format_timestamp(clock())`, in the same transaction as the rule update (SCN-LIM-06.1, SCN-LIM-06.3). A validation failure changes nothing; a PUT repeating the current configuration updates nothing and appends no row (SCN-LIM-06.2). `GET /limits/{kind}/audit` selects rows by kind ordered by increasing `id` and returns `{\"items\":[{\"before\":...,\"after\":...,\"at\":...}]}`; unknown kinds use the same repository lookup and return `404 unknown_kind`.",
+      "refs": [
+        "REQ-LIM-06"
+      ],
+      "reason": "The decision specifies the per-kind, ordered, transactional audit snapshots and domain errors."
+    },
+    {
+      "path": "openspec/changes/add-transfer-limits/tasks.md",
+      "line": 14,
+      "text": "- [x] 1.10 Return the history envelope `{items,total,offset,limit}` with descending integer IDs, defaults 0/50, `total` before pagination, empty pages past the end and 422 `invalid_history_query` for invalid offset/limit/dates/reversed periods/enums (REQ-TXN-02, REQ-LIM-05; SCN-TXN-02.1, SCN-LIM-05.1, SCN-LIM-05.3). Add tests marked `@pytest.mark.task(\"1.10\")` and the matching `@pytest.mark.req(...)` IDs and confirm existing history tests still pass; verify with `uv run --locked python -m pytest -q tests/test_limits.py tests/test_transfers.py -k \"history or pagination\"`.",
+      "refs": [
+        "SCN-TXN-02.2"
+      ],
+      "reason": "Task 1.10 explicitly instructs retaining existing history tests and selects the history tests in tests/test_transfers.py, including reopening the persisted transfer and comparing its lookup to the stored record.",
+      "task": "1.10"
+    }
+  ]
+}

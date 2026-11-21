@@ -1,0 +1,138 @@
+{
+  "accepted": false,
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "baseline_assets_sha256": "bd5d3e928bde7061ff832c543da6924eb152bd4caf735e32eb21416a79aa64d9",
+  "baseline_regression_tests": 68,
+  "baseline_sha256": "4e2a3f05bd6c415f38c045de14d1c899d1f690fc029ca088b7a74be54435cfc3",
+  "bundle_sha256": "533cf0033f6730819a7273712ec567860b253abd5385fa79c01a2cabb4f19d95",
+  "evaluator_image": "sha256:125f814e79a90503d55021aa79cecd2de0402d792bcec22c538441d093315278",
+  "expected_sha256": "ff9486ea1c3bd03eb2a95c4ebb6f77987e7c78aef0aab4d1db7bc47ec18e5fea",
+  "final_commit": "e2e11d806c8a4d6dea52f01eecf2ab57c0c6ab4f",
+  "final_tree": "aae9ac5e15edab1ee4299596540c8ef5ec58b753",
+  "frozen_original_public": {
+    "passed": 68,
+    "total": 68
+  },
+  "frozen_regression": true,
+  "frozen_regression_report_sha256": "490af499e00a4fe83c44c8d5ac3e10e0ad4379e4e6ad0583ff4c36f31de7376b",
+  "independent_frozen_regression_report_sha256": "ede3c3181de2ae682e0a4824266751700bf01ecca9b4540dd74a9acc869401a4",
+  "independent_suite_identities_and_outcomes_match": true,
+  "manifest_sha256": "4ab27984bf4315ad3085c7cc93b130e783c5b73b9cc8e7bdb9f3e415d838f364",
+  "meter_replay": {
+    "allowance": 0.09592978000000005,
+    "billing_source_counts": {
+      "go": 143
+    },
+    "by_stage": {
+      "apply": {
+        "model_calls": 79,
+        "rpt": 5159367
+      },
+      "review": {
+        "model_calls": 24,
+        "rpt": 1466775
+      },
+      "spec": {
+        "model_calls": 19,
+        "rpt": 611845
+      },
+      "verify": {
+        "model_calls": 21,
+        "rpt": 1220915
+      }
+    },
+    "complete": true,
+    "cost": 0,
+    "http_status_counts": {
+      "200": 143
+    },
+    "list_cost": 0.15988311,
+    "meter_sha256": "4628137cf660a3a3c62419725cd018ea0d67d7bc3d79bf8d3858fed8310db678",
+    "model_calls": 143,
+    "normalized_ledgers_identical": true,
+    "reasoning_effort_counts": {
+      "max": 143
+    },
+    "relative_discrepancy": 0,
+    "rpt": 8458902
+  },
+  "oracle_sha256": "61cbb88763cebb50748f488ce054f2b3c60cf1715724060e2387887e49007720",
+  "pipeline_complete": true,
+  "public_contract_defects": [
+    "SCN-LIM-01.4: на базе, созданной публичным API исходной версии, дневная сумма допустимых исходящих переводов может превысить диапазон SQLite SUM. При следующем переводе после обновления наблюдался HTTP 500 вместо 409 daily_limit.",
+    "SCN-LIM-01.4: успешный в пределах дневной нормы перевод в последний представимый день 9999-12-31 возвращает HTTP 500 при вычислении следующего дня.",
+    "SCN-LIM-05.2: включительная верхняя дата 9999-12-31 возвращает HTTP 500. Перевод на 0001-01-01 отсутствует в истории за эту дату из-за сохранённого года без ведущих нулей в закреплённом Linux-окружении.",
+    "SCN-LIM-05.3: корректное неотрицательное смещение 9223372036854775808 возвращает HTTP 500 вместо пустой страницы с сохранённым total."
+  ],
+  "public_contract_probe_sha256": "14e0c51954efe4a5d0bfb1550085182bc95bac0aa6eddbf91614d176df0020a1",
+  "request_file_sha256": "6203c09b3ddcdbdb82ca667069a62aef8406c6c271a89acfdf42b0b03726e213",
+  "request_sha256": "220abccc45a41fbcc640628e9db1239c02c592a3b85707e824bd9ccf05e81ad2",
+  "requirements_sha256": "63caa8579e03d70d39b70b216c9fbb47399040e86af35dfc31979970c601ec01",
+  "review_bound_to_final": true,
+  "review_rounds": 1,
+  "review_sha256": "efdda4e601601a20f38a1175ff95f47e2f15b0bc6f3dae7cc8cf20a997e13fe8",
+  "run_id": "max-f0-repeat-first-f1f8742-1-base-a1",
+  "runner_commit": "f1f87429352157e0bbfeb061b5ca376af457ccf9",
+  "signed_quality": {
+    "artifact_sha256": {
+      "assessment.json": "85dd82e82057d597c7cf6cdc0767bb88f25d9fa50db979977f93de894229c41f",
+      "assessment.sig": "cf927cccea59901d59e90878a25135b5ccfd81a0c9852c995112efd750378e27",
+      "reviewer.pem": "dbf037fde0a674160049ad3e9ef38962174d86b9573f9b0e0d66c246686b1ce4",
+      "verdict/gates.json": "717588c0398afbdee5dc0c8a6792bbc9ee5e33547637a61515ca6d84b6c0e56e",
+      "verdict/trace.json": "f92a6b49fb13173aa908c0daee28403647ea98940f4654e776e3d2a3011fac60"
+    },
+    "failed_checks": [
+      "consistency",
+      "trace",
+      "semantic"
+    ],
+    "files": {
+      "assessment.json": "max-f0-repeat-first-f1f8742-1-base-a1-assessment.json",
+      "assessment.sig": "max-f0-repeat-first-f1f8742-1-base-a1-assessment.sig",
+      "reviewer.pem": "max-f0-repeat-first-f1f8742-1-base-a1-reviewer.pem"
+    },
+    "inferred_trace_links": 3,
+    "metrics": {
+      "Cons": 0,
+      "Cov_expected": 0.6111111111111112,
+      "Cov_req": 0.8571428571428571,
+      "Cov_scn": 0.9523809523809523,
+      "Cov_task": 1,
+      "Green": 1,
+      "Q_hidden": 0.9666666666666667,
+      "R": 1
+    },
+    "passed": false,
+    "signature": "Ed25519",
+    "structural_errors": [
+      "No task references SCN-TXN-02.3"
+    ],
+    "trace_missing_scenarios": [
+      "SCN-TXN-02.3"
+    ],
+    "verified_trace_links": 23
+  },
+  "status": "failed",
+  "tests": {
+    "hidden": {
+      "failed": 1,
+      "independent_report_sha256": "4ccc8cb1ba3f5cc3ebec56830f14ff5c7ffd8ee1f8af264990948d64cb9e8664",
+      "missing": 0,
+      "observed": 30,
+      "passed": 29,
+      "report_sha256": "af34fa0eb4e02e06452138c680b6751c306466d6086ed78d011588e5a5f6bdc2",
+      "required": 30,
+      "skipped": 0
+    },
+    "public": {
+      "failed": 0,
+      "independent_report_sha256": "ab93848666a0db8afc5d805a3e8d7ac4a1b02563c6e84b6c133a3173665b518d",
+      "missing": 0,
+      "observed": 119,
+      "passed": 119,
+      "report_sha256": "38f7d871565b27eeac2c4f4336e9d00f60e4401ec06f4e7f3162a86447864099",
+      "required": 68,
+      "skipped": 0
+    }
+  }
+}
