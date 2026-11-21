@@ -1,0 +1,194 @@
+{
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "features": {
+    "large": {
+      "controls": {
+        "green": {
+          "acceptance": {
+            "error": 0,
+            "failure": 0,
+            "passed": 26,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "750fee173f79f3fc2b93ec4acf0f6f82973e404a4a056e742df46e1a2fec7fc4",
+          "revision": "bda19c0961302eb79cda104681009787b8671884",
+          "source": "qa-independent-release/large-green/result.json"
+        },
+        "mutant": {
+          "acceptance": {
+            "error": 0,
+            "failure": 4,
+            "passed": 22,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "cf9b172ab03b8bce135143abba82bca085ba83d690a7d3077ad0e303a45e8d04",
+          "revision": "a60df673ed17aaee83f9a72ec1ba3a28f66126a5",
+          "source": "qa-independent-release/large-mutant/result.json"
+        },
+        "red": {
+          "acceptance": {
+            "error": 0,
+            "failure": 26,
+            "passed": 0,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "1185f1f83b5183b15415a36b7076c98ef44f44dd565bda46167c22355a44d0a1",
+          "revision": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+          "source": "qa-independent-release/large-red/result.json"
+        }
+      },
+      "feature": "multicurrency-accounts",
+      "oracle_sha256": "c6f74e49c949b3a466624164127906f0c6351bb323527cc080066afab883d865"
+    },
+    "medium": {
+      "controls": {
+        "green": {
+          "acceptance": {
+            "error": 0,
+            "failure": 0,
+            "passed": 30,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "1cc7741cdb863827f76124593a7730d530ca1efcadd4857f488cc282e90ccd18",
+          "revision": "614c16fbbd3d2a2adca7632c6a476159d1c36a6c",
+          "source": "qa-independent-release/medium-green/result.json"
+        },
+        "mutant": {
+          "acceptance": {
+            "error": 0,
+            "failure": 1,
+            "passed": 29,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "a68b74477556f2f7360f6b1f111932eac5b277d6e4079eea272597030ff4f633",
+          "revision": "36ac3e3f62a384e641815464900af42fa9d727e1",
+          "source": "qa-independent-release/medium-mutant/result.json"
+        },
+        "mutant-stale-rules": {
+          "acceptance": {
+            "error": 0,
+            "failure": 1,
+            "passed": 29,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "4b652625bc10627043c469cb5b33e0f157fc3711be48bbb7843a4c833ba18f13",
+          "revision": "a7f5d5b1fc375ae4e28f9c02ff37bef07190d271",
+          "source": "qa-independent-release/medium-mutant-stale-rules/result.json"
+        },
+        "red": {
+          "acceptance": {
+            "error": 0,
+            "failure": 30,
+            "passed": 0,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "5548c28106703f4b17c7464b1d2493174344c95d2446164da4d0603ba852fa5c",
+          "revision": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+          "source": "qa-independent-release/medium-red/result.json"
+        }
+      },
+      "feature": "add-transfer-limits",
+      "oracle_sha256": "5233a3655e53b59a2270ea58b20ca2b394cde48b79889d3f2d6f5c7f5faa6b98"
+    },
+    "small": {
+      "controls": {
+        "green": {
+          "acceptance": {
+            "error": 0,
+            "failure": 0,
+            "passed": 16,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "b5639b46b86d0fa66ee4dd3844106b61983d6160f2a313b7c26f177fa5738076",
+          "revision": "1f948b501e203f6007e6d7171ee4751da3886e7a",
+          "source": "qa-independent-release/small-green/result.json"
+        },
+        "mutant": {
+          "acceptance": {
+            "error": 0,
+            "failure": 3,
+            "passed": 13,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "20e791a1db6782cfffb917df58cc4200471f61dbd7d0f4b04373c5ca2c79a8ad",
+          "revision": "7a7a85f2bd758655761549050a0fc04889e0f7b7",
+          "source": "qa-independent-release/small-mutant/result.json"
+        },
+        "red": {
+          "acceptance": {
+            "error": 0,
+            "failure": 16,
+            "passed": 0,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "bc2839f51e546e81fe6003d60ea64930ebf267d7747c5c46099d76b500534078",
+          "revision": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+          "source": "qa-independent-release/small-red/result.json"
+        }
+      },
+      "feature": "export-history-csv",
+      "oracle_sha256": "92dce3b904d151e6edd4d395565ae5ff18ddf1be7a92cb47a1d05e6f6830693b"
+    }
+  },
+  "kind": "wp01-oracle-qa"
+}
