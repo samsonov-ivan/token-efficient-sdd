@@ -243,8 +243,11 @@ def inspect_run(path):
     except (OSError, KeyError, ValueError, TypeError) as exc:
         a.errors.append(str(exc))
         return a
+    if a.manifest.get("status") == "running":
+        a.errors.append("выполняется")
+        return a
     checks = [inspect_usage]
-    if a.live and not a.technical:
+    if a.live and not a.technical and a.manifest.get("pipeline_complete") is not False:
         checks.append(inspect_quality)
         try:
             inspect_qa_receipt(a)
@@ -447,6 +450,15 @@ def report_baseline(a, out):
         a.stages, key=lambda stage: (stage_order.get(stage, len(stage_order)), stage)
     )
     parts = [f"### Живой B0 · {esc_md(a.path.name)}"]
+    if m.get("pipeline_complete") is False:
+        parts.append(
+            "Конвейер остановился до итоговой приёмки. Метрики качества отсутствуют."
+        )
+        diagnostic = a.qa_receipt_path.with_name(
+            f"{a.path.name}-process-diagnostic.json"
+        )
+        if diagnostic.is_file():
+            parts.append(f"[Диагностика остановки конвейера]({ref(out, diagnostic)})")
     elapsed = elapsed_seconds(m)
     if elapsed is not None:
         parts.append(f"Длительность прогона по манифесту — {elapsed:.1f} с.")
@@ -621,7 +633,11 @@ def report_parts(attempts, pairs, out):
             a.live
             and not a.technical
             and a.manifest.get("mode") == "baseline"
-            and a.manifest.get("pipeline_complete") is True
+            and a.manifest.get("status") != "running"
+            and (
+                a.manifest.get("pipeline_complete") is True
+                or a.manifest.get("status") in {"failed", "interrupted"}
+            )
         ):
             parts.extend(report_baseline(a, out))
     groups = defaultdict(list)

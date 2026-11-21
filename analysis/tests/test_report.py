@@ -253,3 +253,44 @@ def test_live_baseline_shows_stage_spend_and_independent_quality(tmp_path):
     contents = (out / "REPORT.md").read_text()
     assert "сводка независимой приёмки не прошла проверку" in contents
     assert "SCN-LIM-05.3" not in contents
+
+
+def test_stopped_baseline_reports_spend_without_quality(tmp_path):
+    root = tmp_path / "runs"
+    arm = make_arm(root, "stopped", "base", 100)
+    manifest = report.read_json(arm / "manifest.json")
+    manifest.update(
+        mode="baseline", status="failed", pipeline_complete=False, final_commit=None
+    )
+    save(arm / "manifest.json", manifest)
+    out = tmp_path / "output"
+    report.write_report(root, out)
+    contents = (out / "REPORT.md").read_text()
+    assert "Живой B0 · stopped" in contents
+    assert "RPT **100**, модельных вызовов **1**" in contents
+    assert (
+        "Конвейер остановился до итоговой приёмки. Метрики качества отсутствуют."
+        in contents
+    )
+    assert "Публичные тесты" not in contents
+    assert "привязка QA" not in contents
+
+
+def test_running_baseline_leaves_accounting_and_quality_pending(tmp_path):
+    root = tmp_path / "runs"
+    arm = make_arm(root, "active", "base", 100)
+    manifest_file = arm / "manifest.json"
+    manifest = report.read_json(manifest_file)
+    manifest.update(mode="baseline", status="running", pipeline_complete=True)
+    save(manifest_file, manifest)
+
+    checked = report.inspect_run(arm)
+    assert checked.errors == ["выполняется"]
+    assert checked.rpt is None
+    assert not checked.accepted
+
+    out = tmp_path / "output"
+    report.write_report(root, out)
+    contents = (out / "REPORT.md").read_text()
+    assert "выполняется" in contents
+    assert "Живой B0 · active" not in contents
