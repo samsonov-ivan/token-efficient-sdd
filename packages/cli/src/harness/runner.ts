@@ -150,6 +150,17 @@ export class Container {
       args.push('--mount', `type=bind,src=${path},dst=${path}`);
     }
     for (const [key, value] of Object.entries(this.env)) args.push('--env', `${key}=${value}`);
+    // macOS bind mounts can report uid 0 for the checkout root even when its
+    // .git directory belongs to the runner. Trust only this arm's pinned clone.
+    if (process.platform === 'darwin')
+      args.push(
+        '--env',
+        'GIT_CONFIG_COUNT=1',
+        '--env',
+        'GIT_CONFIG_KEY_0=safe.directory',
+        '--env',
+        `GIT_CONFIG_VALUE_0=${join(this.root, 'repo')}`,
+      );
     for (const key of opts.credentials ?? []) if (process.env[key]) args.push('--env', key);
     if (opts.network && process.platform === 'linux')
       args.push('--add-host', 'host.docker.internal:host-gateway');
