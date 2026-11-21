@@ -19,7 +19,7 @@ import { parseArgs } from 'node:util';
 import { gates } from './gates.js';
 import { goCatalog, smokeReceipt, validSubscriptionLedger, verifySmoke } from './harness/go.js';
 import { startUsageRelay } from './harness/relay.js';
-import { captureToolOutput } from './harness/tool-output.js';
+import { captureToolOutput, collectToolOutputs } from './harness/tool-output.js';
 import { evaluate, restoreFinal } from './harness/evaluate.js';
 import {
   activeOwner,
@@ -347,6 +347,14 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
     createSettings(env, m.model, plan.dry ? null : plan.endpoint, plan.limits);
   }
   const c = m.isolation.image ? new Container(root, repo, env, m.isolation.image, m.run_id) : null;
+  const credentials = relay
+    ? []
+    : plan.endpoint
+      ? ['FRUGAL_PROVIDER_API_KEY']
+      : credentialKeys(m.provider);
+  const archiveSecrets = compressTools
+    ? [...credentials.map((name) => process.env[name] ?? ''), relay?.token ?? '']
+    : [];
   const localEnv = { ...env, PATH: process.env.PATH, ...gitAuthor };
   const invokeTool = (name: string, args: string[]) =>
     c
@@ -427,16 +435,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
         for (const line of result.stdout.trimEnd().split('\n')) writer.line(line, false);
       } else {
         if (!c) throw new Error('Live opencode requires container isolation');
-        const credentials = relay
-          ? []
-          : plan.endpoint
-            ? ['FRUGAL_PROVIDER_API_KEY']
-            : credentialKeys(m.provider);
         const secretEnv = relay ? { FRUGAL_RELAY_TOKEN: relay.token } : undefined;
-        const archiveSecrets = [
-          ...credentials.map((name) => process.env[name] ?? ''),
-          ...Object.values(secretEnv ?? {}),
-        ];
         result = await c.exec(
           [
             'timeout',
@@ -532,6 +531,10 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       });
     }
     await closeRelay();
+    if (compressTools) {
+      await c?.stop();
+      collectToolOutputs(repo, runDir, archiveSecrets);
+    }
     const bundle = join(root, 'tmp', `final-${randomUUID()}.bundle`);
     const finalGit = (args: string[]) =>
       c
@@ -576,7 +579,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       );
     } else {
       if (!c) throw new Error('Missing isolation for evaluation');
-      await c.stop();
+      if (!compressTools) await c.stop();
       await closeStorage(c, root, runDir);
       const quality = await evaluate(plan, runDir, m.final_commit, c.image);
       m.gates = quality.gates;
@@ -596,6 +599,13 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
     if (c) {
       try {
         await c.stop();
+        if (compressTools) {
+          try {
+            collectToolOutputs(repo, runDir, archiveSecrets);
+          } catch (archiveError) {
+            m.notes.push(`Tool output archival failed: ${String(archiveError)}`);
+          }
+        }
         if (!plan.dry) await closeStorage(c, root, runDir);
       } catch (e) {
         m.notes.push(`Storage reconciliation failed: ${String(e)}`);

@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { digest } from '../src/harness/io.js';
-import { captureToolOutput } from '../src/harness/tool-output.js';
+import { captureToolOutput, collectToolOutputs } from '../src/harness/tool-output.js';
 
 let root: string;
 let repo: string;
@@ -80,5 +80,16 @@ describe('compressed tool output capture', () => {
       captureToolOutput(repo, runDir, event(hash, true), ['dummy-credential-value']),
     ).toThrow(/credential/);
     expect(existsSync(archive)).toBe(false);
+  });
+
+  it('retains child-session originals whose markers never appeared in the CLI stream', () => {
+    const bytes = Buffer.from('a child tool result');
+    const name = `${digest(bytes)}.log`;
+    writeFileSync(join(logs, name), bytes);
+    writeFileSync(join(logs, '.gitignore'), '*\n');
+    collectToolOutputs(repo, runDir, []);
+
+    expect(readFileSync(join(archive, name))).toEqual(bytes);
+    expect(existsSync(join(archive, '.gitignore'))).toBe(false);
   });
 });
