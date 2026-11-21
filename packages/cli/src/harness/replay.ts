@@ -3,7 +3,19 @@ import { join } from 'node:path';
 import { writeJson } from './io.js';
 
 export type Stage = 'spec' | 'apply' | 'review' | 'fix' | 'verify';
-export type Invocation = { stage: Stage; args: string[]; reviewIter?: number };
+export type Invocation = {
+  stage: Stage;
+  args: string[];
+  reviewIter?: number;
+  task?: string;
+  fixture?: { answer: string; mutate?: () => void; inspection?: string };
+};
+export type ReplayResult = { code: number; stderr: string; stdout: string; replayAnswer?: string };
+
+export function invocationStem(request: Pick<Invocation, 'stage' | 'task' | 'reviewIter'>) {
+  const { stage, task, reviewIter } = request;
+  return task ? `${stage}-${task}` : `${stage}-${reviewIter ?? 0}`;
+}
 export function replay(
   repo: string,
   feature: string,
@@ -11,14 +23,15 @@ export function replay(
   runId: string,
   request: Invocation,
 ) {
-  const { stage } = request;
+  const { stage, fixture } = request;
   const change = join(repo, 'openspec/changes', feature);
-  const session = `ses_${runId}_${stage}_${request.reviewIter ?? 0}`;
+  const session = `ses_${runId}_${stage}_${request.task ?? request.reviewIter ?? 0}`;
   const message = `msg_${session}`;
   const timestamp = Date.now();
   const base = { messageID: message, sessionID: session };
   // This fixture exercises the executor and telemetry only. It implements no benchmark behavior.
-  if (stage === 'spec') {
+  if (fixture) fixture.mutate?.();
+  else if (stage === 'spec') {
     mkdirSync(join(change, 'specs', 'replay'), { recursive: true });
     writeFileSync(
       join(change, 'proposal.md'),
@@ -33,8 +46,7 @@ export function replay(
       join(change, 'tasks.md'),
       '## 1. Replay\n- [ ] 1.1 Write the fixture marker (REQ-REPLAY-01).\n',
     );
-  }
-  if (stage === 'apply') {
+  } else if (stage === 'apply') {
     writeFileSync(
       join(change, 'tasks.md'),
       '## 1. Replay\n- [x] 1.1 Write the fixture marker (REQ-REPLAY-01).\n',
@@ -42,11 +54,12 @@ export function replay(
     writeFileSync(join(repo, 'replay-marker.txt'), 'synthetic lifecycle fixture\n');
   }
   const content =
-    stage === 'review'
+    fixture?.answer ??
+    (stage === 'review'
       ? 'Reviewed the replay marker and checked the synthetic task.\nVERDICT: ACCEPT'
       : stage === 'verify'
         ? 'Checked the marker in the lifecycle fixture.\nVERIFY: PASS'
-        : `Completed the synthetic ${stage} fixture.`;
+        : `Completed the synthetic ${stage} fixture.`);
   const tokens = { input: 11, output: 5, reasoning: 0, cache: { read: 0, write: 0 } };
   const parts = [
     { ...base, id: `start_${session}`, type: 'step-start' },
@@ -86,11 +99,11 @@ export function replay(
           state: {
             status: 'completed',
             input: { filePath: 'replay-marker.txt' },
-            output: 'synthetic lifecycle fixture',
+            output: fixture?.inspection ?? 'synthetic lifecycle fixture',
           },
         },
       }),
     );
   }
-  return { code: 0, stderr: '', stdout: `${events.join('\n')}\n` };
+  return { code: 0, stderr: '', stdout: `${events.join('\n')}\n`, replayAnswer: content };
 }

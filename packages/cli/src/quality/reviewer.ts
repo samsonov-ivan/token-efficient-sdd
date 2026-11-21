@@ -129,6 +129,7 @@ export function prepareRequest(
     change,
     public_suites: ev.suites.filter((s) => s.kind === 'public'),
     public_results: suites.public,
+    ...(ev.review_protocol ? { review_protocol: ev.review_protocol } : {}),
     review: ev.review,
     candidates: publicTests(
       snapshot,

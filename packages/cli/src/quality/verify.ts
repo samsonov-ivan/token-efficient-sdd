@@ -294,18 +294,46 @@ export function evaluate(
       );
   }
   if (!ev.review.length || ev.review.length > 5) reviewErrors.push('Expected 1 to 5 review rounds');
+  const incremental = ev.review_protocol === 'incremental';
+  if (ev.review_protocol !== undefined && !incremental)
+    reviewErrors.push('Unknown review evidence protocol');
+  if (incremental && ev.review.length < 2)
+    reviewErrors.push('Incremental review requires a separate full sanity round');
   for (const [i, r] of ev.review.entries()) {
     const final = i === ev.review.length - 1;
+    const previous = ev.review[i - 1];
+    const next = ev.review[i + 1];
+    const followedBySanity =
+      incremental &&
+      r.verdict === 'pass' &&
+      next?.sanity === true &&
+      next.scope === 'full' &&
+      r.tree === next.tree;
     if (
       r.round !== i + 1 ||
       !r.summary?.trim() ||
       !r.scope?.trim() ||
       !/^[a-f0-9]{40,64}$/.test(r.tree ?? r.commit ?? '') ||
-      r.verdict !== (final ? 'pass' : 'fix')
+      (r.verdict !== (final ? 'pass' : 'fix') && !followedBySanity)
     )
       reviewErrors.push(`Incomplete review evidence in round ${i + 1}`);
     if (final && r.tree !== snapshot.tree && r.commit !== snapshot.commit)
       reviewErrors.push('Last review does not cover evaluated snapshot');
+    if (!incremental) continue;
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(r.tree ?? ''))
+      reviewErrors.push(`Missing Git tree for incremental review round ${i + 1}`);
+    if (r.scope !== 'full' && r.scope !== 'delta')
+      reviewErrors.push(`Invalid incremental review scope in round ${i + 1}`);
+    if ((i === 0 || r.sanity === true) && r.scope !== 'full')
+      reviewErrors.push(`Expected full review in round ${i + 1}`);
+    if (previous?.verdict === 'fix' && r.tree === previous.tree)
+      reviewErrors.push(`Review fix did not produce a new tree before round ${i + 1}`);
+    if (r.scope === 'delta' && (previous?.verdict !== 'fix' || r.previous_tree !== previous.tree))
+      reviewErrors.push(`Review delta is not bound to the prior fix in round ${i + 1}`);
+    if (final && (r.sanity !== true || r.scope !== 'full' || r.tree !== snapshot.tree))
+      reviewErrors.push(
+        'Incremental review requires a full final sanity review of the evaluated tree',
+      );
   }
   const passReq = [...requirements].filter(
     ([id, scns]) =>

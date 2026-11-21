@@ -1,0 +1,24 @@
+diff --git a/example.txt b/example.txt
+index 3072036..771b004 100644
+--- a/example.txt
++++ b/example.txt
+@@ -1,18 +1,18 @@
+ The retained context for input item 0.
+ The retained context for input item 1.
+ The retained context for input item 2.
+ The retained context for input item 3.
+ The retained context for input item 4.
+ The retained context for input item 5.
+ The retained context for input item 6.
+ The retained context for input item 7.
+ The retained context for input item 8.
+-The retained context for input item 9.
++The retained context for corrected item 9.
+ The retained context for input item 10.
+ The retained context for input item 11.
+ The retained context for input item 12.
+ The retained context for input item 13.
+ The retained context for input item 14.
+ The retained context for input item 15.
+ The retained context for input item 16.
+ The retained context for input item 17.

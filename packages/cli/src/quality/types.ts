@@ -51,6 +51,7 @@ export interface Evidence {
   suites: Suite[];
   links: Link[];
   semantic: { requirement: string; verdict: 'pass' | 'fail'; reason: string }[];
+  review_protocol?: 'incremental';
   review: {
     round: number;
     commit?: string;
@@ -58,6 +59,8 @@ export interface Evidence {
     scope: string;
     verdict: 'pass' | 'fix';
     summary: string;
+    sanity?: boolean;
+    previous_tree?: string;
   }[];
 }
 export interface Expected {

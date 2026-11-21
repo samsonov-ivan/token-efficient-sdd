@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   realpathSync,
+  readFileSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -23,7 +24,7 @@ const identity = {
   GIT_COMMITTER_NAME: 'Fixture',
   GIT_COMMITTER_EMAIL: 'fixture@localhost',
 };
-function fixture() {
+function fixture(flags = '{capsule: false}', mode = 'paired') {
   const project = mkdtempSync(join(tmpdir(), 'frugal-harness-test-'));
   const source = join(project, 'source');
   const out = join(project, 'bench/runs');
@@ -37,7 +38,7 @@ function fixture() {
   git(source, ['init', '-b', 'main']);
   writeFileSync(
     join(source, 'frugal.yaml'),
-    'version: 1\nprofile: small\nlanguage: python\nflags: {capsule: true}\ntest: {command: pytest, report: junit}\n',
+    `version: 1\nprofile: small\nlanguage: python\nflags: ${flags}\ntest: {command: pytest, report: junit}\n`,
   );
   git(source, ['add', '.']);
   git(source, ['commit', '-m', 'Base'], identity);
@@ -58,7 +59,7 @@ function fixture() {
     '--feature',
     feature,
     '--mode',
-    'paired',
+    mode,
     '--dry-run',
   ];
   return { project, out, args, input };
@@ -96,7 +97,7 @@ describe('isolated run lifecycle', () => {
       branch: 'opt',
       pair_id: ma.pair_id,
       baseline_hash: ma.baseline_hash,
-      flags: { capsule: true },
+      flags: { capsule: false },
     });
     expect(ma.isolation.root).not.toBe(mb.isolation.root);
     for (const manifest of [ma, mb]) {
@@ -134,6 +135,97 @@ describe('isolated run lifecycle', () => {
     writeFileSync(join(input, 'requirement.md'), 'Changed');
     await expect(run([...args, '--resume'])).rejects.toThrow('Frozen run inputs changed');
   }, 60000);
+  it.each(['paired', 'ablation'] as const)(
+    'executes the capsule and review flags in a %s replay',
+    async (mode) => {
+      const flags = ['capsule', 'checklist_review', 'incremental_review', 'targeted_fix'];
+      const { out, args } = fixture(`{${flags.map((flag) => `${flag}: false`).join(', ')}}`, mode);
+      expect(await run([...args, ...flags.flatMap((flag) => ['--flag', flag])])).toBe(0);
+      const branch = mode === 'paired' ? 'opt' : `ablation-${flags.join('-')}`;
+      const dir = join(out, `test-1-${branch}-a1`);
+      const manifest = readJson<RunManifest>(join(dir, 'manifest.json'));
+      expect(manifest).toMatchObject({
+        dry_run: true,
+        model: 'mock/replay',
+        flags: Object.fromEntries(flags.map((flag) => [flag, true])),
+        status: 'complete',
+        pipeline_complete: true,
+        accepted: false,
+        gates: { evaluated: false },
+        hidden: { evaluated: false },
+      });
+      expect(manifest.stages.map(({ stage }) => stage)).toEqual([
+        'spec',
+        'apply',
+        'apply',
+        'review',
+        'fix',
+        'review',
+        'review',
+        'verify',
+      ]);
+      expect(manifest.stages.filter(({ task }) => task).map(({ task }) => task)).toEqual([
+        '1.1',
+        '1.2',
+      ]);
+      expect(new Set(manifest.stages.map(({ session_id }) => session_id)).size).toBe(8);
+      if (mode === 'paired') {
+        const base = join(out, 'test-1-base-a1');
+        expect(readJson<RunManifest>(join(base, 'manifest.json'))).toMatchObject({
+          flags: Object.fromEntries(flags.map((flag) => [flag, false])),
+        });
+        expect(existsSync(join(base, 'opt'))).toBe(false);
+        expect(existsSync(join(base, 'baseline.json'))).toBe(true);
+      }
+
+      const opt = join(dir, 'opt');
+      const capsule = readFileSync(join(opt, 'inputs/apply-1.1.txt'), 'utf8');
+      expect(capsule).toContain('The replay fixture SHALL persist `replay-marker.txt`.');
+      expect(capsule).toContain('SCN-REPLAY-01.1');
+      expect(capsule).not.toContain('REQ-REPLAY-02');
+      expect(existsSync(join(opt, 'inputs/apply-1.2.txt'))).toBe(true);
+      const review = join(opt, 'review');
+      const rounds = readJson<{ tree: string }[]>(join(review, 'rounds.json'));
+      expect(rounds).toMatchObject([
+        { scope: 'full', final: false, verdict: 'changes_requested' },
+        { scope: 'delta', final: false, verdict: 'approved', previousTree: rounds[0].tree },
+        { scope: 'full', final: true, verdict: 'approved', tree: rounds[1].tree },
+      ]);
+      expect(rounds[0].tree).not.toBe(rounds[1].tree);
+      const delta = readFileSync(join(review, 'round-2/delta.patch'), 'utf8');
+      expect(delta).toContain('+synthetic lifecycle fixture');
+      expect(delta).not.toContain('replay-sidecar.txt');
+      expect(readFileSync(join(review, 'round-3/full.patch'), 'utf8')).toContain(
+        'replay-sidecar.txt',
+      );
+      expect(readJson(join(review, 'round-2/findings.json'))).toMatchObject({
+        findings: [{ id: 'F-REPLAY-01', status: 'resolved' }],
+      });
+      expect(readJson(join(opt, 'verify.json'))).toEqual({ tree: rounds[2].tree, passed: true });
+      const {
+        final_commit,
+        isolation: { root },
+      } = manifest;
+      if (!root || !final_commit) throw new Error('Missing final fixture snapshot');
+      const performer = join(root, 'repo');
+      expect(git(performer, ['rev-parse', 'HEAD^{tree}'])).not.toBe(rounds[2].tree);
+      expect(git(performer, ['rev-parse', `${final_commit}^{tree}`])).toBe(rounds[2].tree);
+      expect(readJson(join(dir, 'meter.json'))).toMatchObject({
+        complete: true,
+        call_count: manifest.stages.length,
+        known_rpt: 16 * manifest.stages.length,
+      });
+      const calls = readFileSync(join(dir, 'calls.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      expect(calls.filter(({ stage }) => stage === 'apply').map(({ task }) => task)).toEqual([
+        '1.1',
+        '1.2',
+      ]);
+    },
+    60000,
+  );
   it('selects an E0 budget plan independently of its experiment ID and binds it on resume', async () => {
     const { project, out } = fixture();
     const plans = join(project, 'bench/plans');

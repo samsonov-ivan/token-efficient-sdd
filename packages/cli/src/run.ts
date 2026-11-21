@@ -19,6 +19,7 @@ import { parseArgs } from 'node:util';
 import { gates } from './gates.js';
 import { goCatalog, smokeReceipt, validSubscriptionLedger, verifySmoke } from './harness/go.js';
 import { startUsageRelay } from './harness/relay.js';
+import { captureToolOutput, collectToolOutputs } from './harness/tool-output.js';
 import { evaluate, restoreFinal } from './harness/evaluate.js';
 import {
   activeOwner,
@@ -31,11 +32,16 @@ import {
   readJson,
   writeJson,
 } from './harness/io.js';
-import type { Result } from './harness/io.js';
+import { executeOptimizedReplay, usesOptimizedReplay } from './harness/optimized-replay.js';
 import { flagsFor, parsePlan } from './harness/plan.js';
 import type { Flag, Plan, Slot } from './harness/plan.js';
-import { replay } from './harness/replay.js';
-import type { Stage, Invocation } from './harness/replay.js';
+import {
+  invocationStem,
+  type Invocation,
+  replay,
+  type ReplayResult,
+  type Stage,
+} from './harness/replay.js';
 import {
   Container,
   createSettings,
@@ -50,6 +56,7 @@ type StageRecord = {
   stage: Stage;
   session_id: string;
   review_iter?: number;
+  task?: string;
   started_at: string;
   finished_at: string | null;
 };
@@ -235,7 +242,7 @@ function stageWriter(m: Manifest, runDir: string, request: Invocation, start: st
   const path = join(runDir, 'manifest.json');
   const stageFiles = join(runDir, 'raw/stages');
   mkdirSync(stageFiles, { recursive: true });
-  const stem = `${request.stage}-${request.reviewIter ?? 0}`;
+  const stem = invocationStem(request);
   const ids = new Set<string>();
   return {
     line: (line: string, stderr: boolean) => {
@@ -255,6 +262,7 @@ function stageWriter(m: Manifest, runDir: string, request: Invocation, start: st
           stage: request.stage,
           session_id: event.sessionID,
           review_iter: request.reviewIter,
+          task: request.task,
           started_at: start,
           finished_at: null,
         });
@@ -271,6 +279,15 @@ function stageWriter(m: Manifest, runDir: string, request: Invocation, start: st
 
 async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, root: string) {
   const env = runnerEnvironment(root);
+  const compressTools = m.mode !== 'baseline' && m.flags.tool_output_compression === true;
+  if (compressTools) env.FRUGAL_TOOL_OUTPUT_COMPRESSION = '1';
+  const installPlugin = (name: string) => {
+    const plugin = join(plan.project, 'packages/opencode-plugin/dist/index.js');
+    const plugins = join(env.OPENCODE_CONFIG_DIR, 'plugins');
+    mkdirSync(plugins, { recursive: true });
+    copyFileSync(plugin, join(plugins, name));
+    m.metering.plugin_sha256 = hashTree(plugin);
+  };
   let relay: Awaited<ReturnType<typeof startUsageRelay>> | undefined;
   const closeRelay = async () => {
     if (relay) {
@@ -292,11 +309,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
         }
       : await goCatalog(m.model);
     m.prices = info.prices;
-    const plugin = join(plan.project, 'packages/opencode-plugin/dist/index.js');
-    const plugins = join(env.OPENCODE_CONFIG_DIR, 'plugins');
-    mkdirSync(plugins, { recursive: true });
-    copyFileSync(plugin, join(plugins, 'frugal-correlation.js'));
-    m.metering.plugin_sha256 = hashTree(plugin);
+    installPlugin('frugal-correlation.js');
     env.FRUGAL_USAGE_CORRELATION = '1';
     writeJson(join(runDir, 'go-preflight.json'), {
       ...info,
@@ -329,8 +342,19 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       await closeRelay();
       throw error;
     }
-  } else createSettings(env, m.model, plan.dry ? null : plan.endpoint, plan.limits);
+  } else {
+    if (compressTools) installPlugin('frugal-compression.js');
+    createSettings(env, m.model, plan.dry ? null : plan.endpoint, plan.limits);
+  }
   const c = m.isolation.image ? new Container(root, repo, env, m.isolation.image, m.run_id) : null;
+  const credentials = relay
+    ? []
+    : plan.endpoint
+      ? ['FRUGAL_PROVIDER_API_KEY']
+      : credentialKeys(m.provider);
+  const archiveSecrets = compressTools
+    ? [...credentials.map((name) => process.env[name] ?? ''), relay?.token ?? '']
+    : [];
   const localEnv = { ...env, PATH: process.env.PATH, ...gitAuthor };
   const invokeTool = (name: string, args: string[]) =>
     c
@@ -400,16 +424,18 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       git(repo, ['add', '-A'], gitEnv);
       return git(repo, ['write-tree'], gitEnv);
     };
-    const invoke = async (request: Invocation): Promise<Result> => {
+    const invoke = async (request: Invocation): Promise<ReplayResult> => {
       if (interrupted) throw new Error('Interrupted before next stage');
       const writer = stageWriter(m, runDir, request, now());
       if (!request.args.includes('--title')) throw new Error('Missing fixed session title');
-      let result: Result;
+      let result: ReplayResult;
+      let archiveError: unknown;
       if (plan.dry && !plan.fixture) {
         result = replay(repo, plan.feature, runDir, m.run_id, request);
         for (const line of result.stdout.trimEnd().split('\n')) writer.line(line, false);
       } else {
         if (!c) throw new Error('Live opencode requires container isolation');
+        const secretEnv = relay ? { FRUGAL_RELAY_TOKEN: relay.token } : undefined;
         result = await c.exec(
           [
             'timeout',
@@ -420,13 +446,19 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
           ],
           {
             network: true,
-            credentials: relay
-              ? []
-              : plan.endpoint
-                ? ['FRUGAL_PROVIDER_API_KEY']
-                : credentialKeys(m.provider),
-            secretEnv: relay ? { FRUGAL_RELAY_TOKEN: relay.token } : undefined,
-            onLine: writer.line,
+            credentials,
+            secretEnv,
+            onLine: compressTools
+              ? (line, stderr) => {
+                  writer.line(line, stderr);
+                  if (stderr || archiveError) return;
+                  try {
+                    captureToolOutput(repo, runDir, line, archiveSecrets);
+                  } catch (error) {
+                    archiveError = error;
+                  }
+                }
+              : writer.line,
           },
         );
       }
@@ -438,6 +470,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
         );
       }
       if (interrupted) throw new Error('Interrupted during stage');
+      if (archiveError) throw archiveError;
       return result;
     };
     if (plan.goSmoke && plan.goRelay) {
@@ -473,18 +506,35 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       m.notes.push('Subscription smoke; no feature implementation or quality acceptance.');
       return;
     }
-    await executeBaseline({
-      repo,
-      configDir: env.OPENCODE_CONFIG_DIR,
-      assetsRoot: join(plan.project, 'assets'),
-      runDir,
-      feature: plan.feature,
-      requirement: plan.requirements,
-      model: m.model,
-      invoke,
-      snapshot,
-    });
+    if (plan.dry && m.mode !== 'baseline' && usesOptimizedReplay(m.flags)) {
+      await executeOptimizedReplay({
+        repo,
+        runDir,
+        feature: plan.feature,
+        model: m.model,
+        flags: m.flags,
+        baseTree: plan.pin,
+        invoke,
+        snapshot,
+      });
+    } else {
+      await executeBaseline({
+        repo,
+        configDir: env.OPENCODE_CONFIG_DIR,
+        assetsRoot: join(plan.project, 'assets'),
+        runDir,
+        feature: plan.feature,
+        requirement: plan.requirements,
+        model: m.model,
+        invoke,
+        snapshot,
+      });
+    }
     await closeRelay();
+    if (compressTools) {
+      await c?.stop();
+      collectToolOutputs(repo, runDir, archiveSecrets);
+    }
     const bundle = join(root, 'tmp', `final-${randomUUID()}.bundle`);
     const finalGit = (args: string[]) =>
       c
@@ -498,6 +548,8 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
           )
         : Promise.resolve(git(repo, args, gitAuthor));
     const tree = await snapshot();
+    if (compressTools && git(repo, ['ls-tree', '-r', '--name-only', tree, '--', '.frugal/logs']))
+      throw new Error('Full tool logs cannot be tracked in the final snapshot');
     m.final_commit = await finalGit([
       'commit-tree',
       tree,
@@ -527,7 +579,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       );
     } else {
       if (!c) throw new Error('Missing isolation for evaluation');
-      await c.stop();
+      if (!compressTools) await c.stop();
       await closeStorage(c, root, runDir);
       const quality = await evaluate(plan, runDir, m.final_commit, c.image);
       m.gates = quality.gates;
@@ -547,6 +599,13 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
     if (c) {
       try {
         await c.stop();
+        if (compressTools) {
+          try {
+            collectToolOutputs(repo, runDir, archiveSecrets);
+          } catch (archiveError) {
+            m.notes.push(`Tool output archival failed: ${String(archiveError)}`);
+          }
+        }
         if (!plan.dry) await closeStorage(c, root, runDir);
       } catch (e) {
         m.notes.push(`Storage reconciliation failed: ${String(e)}`);

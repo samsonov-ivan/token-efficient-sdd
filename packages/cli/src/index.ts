@@ -17,6 +17,7 @@ const qualityUsage =
   '[--signature FILE --reviewer-key FILE] [--openspec BIN] [--capability ID]';
 
 const moduleUsage: Partial<Record<Command, string>> = {
+  capsule: '<change> <task> [--repo DIR]',
   consistency: `${qualityUsage} [--evidence FILE]`,
   gates: `${qualityUsage} --evidence FILE`,
   meter: '<run-dir> [--out <dir>]',
