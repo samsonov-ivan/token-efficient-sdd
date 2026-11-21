@@ -1,0 +1,1 @@
+"""Minibank public benchmark application."""

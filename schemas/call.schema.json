@@ -1,0 +1,226 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "call",
+  "type": "object",
+  "required": [
+    "run_id",
+    "branch",
+    "model",
+    "provider_id",
+    "model_id",
+    "stage",
+    "task",
+    "review_iter",
+    "session_id",
+    "message_id",
+    "parent_session_id",
+    "event_key",
+    "request_id",
+    "attempt",
+    "source_schema",
+    "usage_status",
+    "ts",
+    "raw_ref",
+    "raw",
+    "cost",
+    "t_in",
+    "t_cache_read",
+    "t_cache_write",
+    "t_out",
+    "t_reasoning"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^(base|opt|ablation-[a-zA-Z0-9_-]+)$"
+    },
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "provider_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "model_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "stage": {
+      "enum": [
+        "propose",
+        "spec",
+        "specs",
+        "design",
+        "tasks",
+        "apply",
+        "review",
+        "fix",
+        "verify",
+        "other"
+      ]
+    },
+    "task": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "review_iter": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "message_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "parent_session_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "event_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "source_schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "usage_status": {
+      "enum": [
+        "known",
+        "unknown",
+        "conflict"
+      ]
+    },
+    "ts": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "raw_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "raw": {
+      "type": "object"
+    },
+    "cost": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "t_in": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "t_cache_read": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "t_cache_write": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "t_out": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "t_reasoning": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "usage_status": {
+            "const": "known"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "t_in": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "t_cache_read": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "t_cache_write": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "t_out": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "t_reasoning": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  ]
+}

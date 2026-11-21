@@ -1,0 +1,235 @@
+{
+  "version": 1,
+  "repo": "minibank",
+  "feature": "multicurrency-accounts",
+  "requirements": [
+    {
+      "id": "REQ-FX-01",
+      "description": "Валюта счёта",
+      "scenarios": [
+        {
+          "id": "SCN-FX-01.1",
+          "description": "`POST /accounts` принимает необязательное поле `currency` (по умолчанию RUB) и возвращает его с остальными данными; `GET /accounts/{id}` также возвращает currency. Ранее созданные счета читаются как RUB."
+        },
+        {
+          "id": "SCN-FX-01.2",
+          "description": "Допустимы только буквальные RUB, USD, EUR. Иные значения при создании дают 422 `invalid_currency`. У каждого счёта одна неизменная валюта, баланс в её младших единицах."
+        }
+      ]
+    },
+    {
+      "id": "REQ-FX-02",
+      "description": "Справочник курсов",
+      "scenarios": [
+        {
+          "id": "SCN-FX-02.1",
+          "description": "`PUT /rates/{source}/{destination}` принимает `{\"numerator\":2,\"denominator\":3,\"fee_bps\":100}` и возвращает 200 с этими значениями плюс поля `source`, `destination`. Курс означает единицы destination за одну source. Пара направленная. Повторная запись заменяет значения."
+        },
+        {
+          "id": "SCN-FX-02.2",
+          "description": "numerator и denominator — положительные целые, fee_bps — целое от 0 до 10000 включительно. Дроби, булевы, пропуски или выход за границы дают 422 `invalid_rate`, до ошибки действующие правила сохраняются."
+        },
+        {
+          "id": "SCN-FX-02.3",
+          "description": "Неизвестная валюта в URL — 422 `invalid_currency`, одинаковые валюты — 422 `same_currency`. `GET /rates/{source}/{destination}` отдаёт полный объект как при PUT либо 404 `rate_not_found`; обратный курс автоматически не появляется. Изменения переживают пересоздание приложения на прежнем файле."
+        }
+      ]
+    },
+    {
+      "id": "REQ-FX-03",
+      "description": "Котировка",
+      "scenarios": [
+        {
+          "id": "SCN-FX-03.1",
+          "description": "`POST /quotes` принимает те же поля `source,destination,amount`, что перевод. Ответ 200 содержит ровно `source_currency,destination_currency,amount,converted,fee,total_debit`. converted = округление amount*numerator/denominator до ближайшего целого, половина вверх. fee = округление amount*fee_bps/10000 вверх, total_debit = amount+fee."
+        },
+        {
+          "id": "SCN-FX-03.2",
+          "description": "При совпадающей валюте converted=amount, fee=0, справочник не требуется. Котировка проверяет оба счёта и курс, однако не требует достаточного баланса и не меняет баланс, операции и отчёты."
+        },
+        {
+          "id": "SCN-FX-03.3",
+          "description": "При отсутствии направленного курса котировка и перевод дают 409 `rate_unavailable`. Если converted после округления ноль, оба дают 422 `amount_too_small`. Неизвестный счёт даёт 404 `account_not_found`."
+        }
+      ]
+    },
+    {
+      "id": "REQ-FX-04",
+      "description": "Расчёт и снимок",
+      "scenarios": [
+        {
+          "id": "SCN-FX-04.1",
+          "description": "`POST /transfers` дебетует total_debit в валюте отправителя, кредитует converted в валюте получателя, ответ 201 включает обычную запись и все шесть полей котировки. Недостаток средств с учётом комиссии даёт 409 `insufficient_funds`; при ошибках оба баланса и история неизменны."
+        },
+        {
+          "id": "SCN-FX-04.2",
+          "description": "`GET /transfers/{id}` и записи `GET /accounts/{id}/history` содержат сохранённые шесть полей. Изменение ставки не пересчитывает старые переводы. У ранее сохранённых до обновления переводов валюты RUB/RUB, converted=amount, fee=0, total_debit=amount."
+        },
+        {
+          "id": "SCN-FX-04.3",
+          "description": "При совпадающей валюте существующий путь перевода сохраняется, комиссия нулевая. Использовать точное целочисленное округление, включая случай amount=9007199254740993 при курсе 1/2 и нулевой комиссии; обе суммы и балансы в примерах укладываются в знаковое 64-битное целое."
+        }
+      ]
+    },
+    {
+      "id": "REQ-FX-05",
+      "description": "Отчёт счёта",
+      "scenarios": [
+        {
+          "id": "SCN-FX-05.1",
+          "description": "`GET /accounts/{id}/fx-report` отдаёт 200 и ровно `{\"account_id\":\"…\",\"currency\":\"…\",\"incoming\":0,\"outgoing\":0,\"fees\":0,\"count\":0}`. count — число связанных переводов, incoming — сумма полученных converted, outgoing — сумма исходных amount без комиссии, fees — начисленные отправителю комиссии. Все суммы в собственной валюте счёта."
+        },
+        {
+          "id": "SCN-FX-05.2",
+          "description": "Учитывать обычные и конвертированные переводы, исключать чужие операции; неизвестный счёт — 404 `account_not_found`. Смена ставок не меняет отчёт по старым операциям."
+        },
+        {
+          "id": "SCN-FX-05.3",
+          "description": "Необязательные `from` и `to` — даты YYYY-MM-DD включительно по UTC; допускается любой один фильтр. Ошибочный формат, несуществующая дата или from позже to — 422 `invalid_report_query`. Перезапуск с тем же хранилищем сохраняет отчёт."
+        }
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "1.1",
+      "description": "Миграция счетов",
+      "requirements": [
+        "REQ-FX-01"
+      ]
+    },
+    {
+      "id": "1.2",
+      "description": "Создание счёта",
+      "requirements": [
+        "REQ-FX-01"
+      ]
+    },
+    {
+      "id": "1.3",
+      "description": "Валидация и чтение",
+      "requirements": [
+        "REQ-FX-01"
+      ]
+    },
+    {
+      "id": "1.4",
+      "description": "Хранение курсов",
+      "requirements": [
+        "REQ-FX-02"
+      ]
+    },
+    {
+      "id": "1.5",
+      "description": "Редактирование",
+      "requirements": [
+        "REQ-FX-02"
+      ]
+    },
+    {
+      "id": "1.6",
+      "description": "Проверка ставки",
+      "requirements": [
+        "REQ-FX-02"
+      ]
+    },
+    {
+      "id": "1.7",
+      "description": "Чтение курса",
+      "requirements": [
+        "REQ-FX-02"
+      ]
+    },
+    {
+      "id": "1.8",
+      "description": "Вычисление converted",
+      "requirements": [
+        "REQ-FX-03"
+      ]
+    },
+    {
+      "id": "1.9",
+      "description": "Вычисление комиссии",
+      "requirements": [
+        "REQ-FX-03"
+      ]
+    },
+    {
+      "id": "1.10",
+      "description": "Котировка",
+      "requirements": [
+        "REQ-FX-03"
+      ]
+    },
+    {
+      "id": "1.11",
+      "description": "Отсутствие резервирования",
+      "requirements": [
+        "REQ-FX-03"
+      ]
+    },
+    {
+      "id": "1.12",
+      "description": "Ошибки расчёта",
+      "requirements": [
+        "REQ-FX-03"
+      ]
+    },
+    {
+      "id": "1.13",
+      "description": "Дебет",
+      "requirements": [
+        "REQ-FX-04"
+      ]
+    },
+    {
+      "id": "1.14",
+      "description": "Кредит",
+      "requirements": [
+        "REQ-FX-04"
+      ]
+    },
+    {
+      "id": "1.15",
+      "description": "Сохранение расчёта",
+      "requirements": [
+        "REQ-FX-04"
+      ]
+    },
+    {
+      "id": "1.16",
+      "description": "Исторические условия",
+      "requirements": [
+        "REQ-FX-04"
+      ]
+    },
+    {
+      "id": "1.17",
+      "description": "Старые операции",
+      "requirements": [
+        "REQ-FX-04"
+      ]
+    },
+    {
+      "id": "1.18",
+      "description": "Суммы отчёта",
+      "requirements": [
+        "REQ-FX-05"
+      ]
+    },
+    {
+      "id": "1.19",
+      "description": "Комиссии и изоляция",
+      "requirements": [
+        "REQ-FX-05"
+      ]
+    },
+    {
+      "id": "1.20",
+      "description": "Фильтры и перезапуск",
+      "requirements": [
+        "REQ-FX-05"
+      ]
+    }
+  ]
+}

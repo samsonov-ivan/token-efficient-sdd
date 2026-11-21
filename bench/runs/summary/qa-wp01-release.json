@@ -1,0 +1,194 @@
+{
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "features": {
+    "large": {
+      "controls": {
+        "green": {
+          "acceptance": {
+            "error": 0,
+            "failure": 0,
+            "passed": 26,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "364992ea8cf580928da9cecd9604bc865c83118d408397fedd6c4981c4f6e0b4",
+          "revision": "bda19c0961302eb79cda104681009787b8671884",
+          "source": "qa-wp01-release/large-green/result.json"
+        },
+        "mutant": {
+          "acceptance": {
+            "error": 0,
+            "failure": 4,
+            "passed": 22,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "2ab8f14af3e0d199b7dc209fbd1172de28b4bd70303bcdb7b5f06785172fe640",
+          "revision": "a60df673ed17aaee83f9a72ec1ba3a28f66126a5",
+          "source": "qa-wp01-release/large-mutant/result.json"
+        },
+        "red": {
+          "acceptance": {
+            "error": 0,
+            "failure": 26,
+            "passed": 0,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "99114bd77ed08f2905e33dc4739431e65db36f16212cab8eaf68e3e728333683",
+          "revision": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+          "source": "qa-wp01-release/large-red/result.json"
+        }
+      },
+      "feature": "multicurrency-accounts",
+      "oracle_sha256": "c6f74e49c949b3a466624164127906f0c6351bb323527cc080066afab883d865"
+    },
+    "medium": {
+      "controls": {
+        "green": {
+          "acceptance": {
+            "error": 0,
+            "failure": 0,
+            "passed": 30,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "8efb3a38126619107824ece8dc4c3048480eb88f716cb09668626f0c496e4906",
+          "revision": "614c16fbbd3d2a2adca7632c6a476159d1c36a6c",
+          "source": "qa-wp01-release/medium-green/result.json"
+        },
+        "mutant": {
+          "acceptance": {
+            "error": 0,
+            "failure": 1,
+            "passed": 29,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "e4a3353ffdd17f9927077595e7d53f6dd9da3bd0b6436567e48f354abc2231fc",
+          "revision": "36ac3e3f62a384e641815464900af42fa9d727e1",
+          "source": "qa-wp01-release/medium-mutant/result.json"
+        },
+        "mutant-stale-rules": {
+          "acceptance": {
+            "error": 0,
+            "failure": 1,
+            "passed": 29,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "ed6d9eb15d9f851535f2f55858d85058dc41c27772afa0eb63773812b046dec4",
+          "revision": "a7f5d5b1fc375ae4e28f9c02ff37bef07190d271",
+          "source": "qa-wp01-release/medium-mutant-stale-rules/result.json"
+        },
+        "red": {
+          "acceptance": {
+            "error": 0,
+            "failure": 30,
+            "passed": 0,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "ff295335c03e7ec82be3ef9afc23c2cb1b5874158d89759f44ac5287aef4011b",
+          "revision": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+          "source": "qa-wp01-release/medium-red/result.json"
+        }
+      },
+      "feature": "add-transfer-limits",
+      "oracle_sha256": "5233a3655e53b59a2270ea58b20ca2b394cde48b79889d3f2d6f5c7f5faa6b98"
+    },
+    "small": {
+      "controls": {
+        "green": {
+          "acceptance": {
+            "error": 0,
+            "failure": 0,
+            "passed": 16,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "7ffce3fa295a5a6ac6536aef6e13926f6190aceac796d2a7317b954f1de5fc8b",
+          "revision": "1f948b501e203f6007e6d7171ee4751da3886e7a",
+          "source": "qa-wp01-release/small-green/result.json"
+        },
+        "mutant": {
+          "acceptance": {
+            "error": 0,
+            "failure": 3,
+            "passed": 13,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "66ff125d73e48cee5cf18006c899b58fdf55254d74393eeed8f7d034830b1f24",
+          "revision": "7a7a85f2bd758655761549050a0fc04889e0f7b7",
+          "source": "qa-wp01-release/small-mutant/result.json"
+        },
+        "red": {
+          "acceptance": {
+            "error": 0,
+            "failure": 16,
+            "passed": 0,
+            "skipped": 0
+          },
+          "regression": {
+            "error": 0,
+            "failure": 0,
+            "passed": 68,
+            "skipped": 0
+          },
+          "result_sha256": "f84ff70e6ae9ef3ba13c89b6ded9acb02b4ce4dff0c68dc3c30d0ddff7bb0fd7",
+          "revision": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+          "source": "qa-wp01-release/small-red/result.json"
+        }
+      },
+      "feature": "export-history-csv",
+      "oracle_sha256": "92dce3b904d151e6edd4d395565ae5ff18ddf1be7a92cb47a1d05e6f6830693b"
+    }
+  },
+  "kind": "wp01-oracle-qa"
+}

@@ -1,0 +1,1 @@
+{{change}}. Perform the stock verification and include the full report. Leave the change unchanged. End with VERIFY: FAIL if critical issues remain or required checks could not be completed, otherwise VERIFY: PASS.

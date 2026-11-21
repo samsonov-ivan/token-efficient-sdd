@@ -1,0 +1,10 @@
+version: 1
+language: python
+test:
+  command: "python -m pytest -q"
+  report: junit
+profile: auto
+paths:
+  src: ["src"]
+  tests: ["tests"]
+flags: {}

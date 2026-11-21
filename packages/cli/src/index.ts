@@ -12,6 +12,19 @@ const commands = {
 
 type Command = keyof typeof commands;
 
+const qualityUsage =
+  '<change> --expected FILE --out DIR [--repo DIR] [--infer] [--prepare | --assessment FILE] ' +
+  '[--signature FILE --reviewer-key FILE] [--openspec BIN] [--capability ID]';
+
+const moduleUsage: Partial<Record<Command, string>> = {
+  consistency: `${qualityUsage} [--evidence FILE]`,
+  gates: `${qualityUsage} --evidence FILE`,
+  meter: '<run-dir> [--out <dir>]',
+  report: '<runs-dir> [options]',
+  run: '--mode <mode> --feature <id> --model <id> [--runs N] [--dry-run]',
+  trace: `${qualityUsage} --evidence FILE`,
+};
+
 function isCommand(value: string): value is Command {
   return Object.hasOwn(commands, value);
 }
@@ -31,8 +44,12 @@ export async function main(args: string[]): Promise<number> {
     return 2;
   }
   if (options.includes('-h') || options.includes('--help')) {
-    console.log(`Usage: frugal ${name} [options]\n\n${commands[name]}`);
+    console.log(`Usage: frugal ${name} ${moduleUsage[name] ?? '[options]'}\n\n${commands[name]}`);
     return 0;
+  }
+  if (Object.hasOwn(moduleUsage, name)) {
+    const module = await import(new URL(`./${name}.js`, import.meta.url).href);
+    return (await module[name](options)) ?? 0;
   }
   console.error(`frugal ${name} is not implemented in this build.`);
   return 2;

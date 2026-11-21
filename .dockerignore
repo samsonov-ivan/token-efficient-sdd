@@ -1,0 +1,8 @@
+**
+!package.json
+!package-lock.json
+!packages/cli/package.json
+!packages/opencode-plugin/package.json
+!bench/repos/minibank/pyproject.toml
+!bench/repos/minibank/uv.lock
+!tools/runner/Dockerfile

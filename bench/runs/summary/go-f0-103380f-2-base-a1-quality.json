@@ -1,0 +1,78 @@
+{
+  "answers_sha256": {
+    "apply": "6e18dd9428d2129cd0ed0f9d8dec8b75fe26476531ce1e71e20b3fcd7760fa06",
+    "review-1": "282c237928855e4baada92375aa13cc4b1550648bbd5fa6a0ce376ab12a09350",
+    "spec": "3c45eb00f32be855d0fceafd2bfb3b51beb78751639ef62ce67476af2eaf8bbd",
+    "verify": "2d22edeb45603eb6bd6161fd221d020bf3519affd3b89043f6e91d533bcf6dd5"
+  },
+  "base_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "baseline_assets_sha256": "bd5d3e928bde7061ff832c543da6924eb152bd4caf735e32eb21416a79aa64d9",
+  "baseline_regression_tests": 68,
+  "baseline_sha256": "c5a4783c0f569d28875b5e0077ddfbfc0c62c960879df20a0f6bb378b91cc71b",
+  "bundle_sha256": "fc4679c28065964dd6f27f33224d18fd36332c12a99e7aa4b9654002918894f6",
+  "final_commit": "8e487fa711920199c914c8e60682bc7c37b03ae9",
+  "frozen_regression": true,
+  "manifest_sha256": "2444df6dd038778e7546ff33ba2f56d6663f2d4030c4dc775fc7c011b1198718",
+  "pipeline_complete": true,
+  "public_contract_defects": [
+    "SCN-LIM-05.3: SQLite integer overflow prevents returning the empty successful page with unchanged total for a sufficiently large nonnegative offset."
+  ],
+  "request_sha256": "ee956a86b29ba26f6ee3e3034b53a6c5e30ff913c83b782d9861fb00eea2a48a",
+  "review_bound_to_final": true,
+  "review_rounds": 1,
+  "run_id": "go-f0-103380f-2-base-a1",
+  "signed_quality": {
+    "artifact_sha256": {
+      "assessment.json": "462552c78abf9dffc84b46013cd3970cd9c937164a99146d923e233d142735ee",
+      "assessment.sig": "32d50c4925503c608ddb9cae0e10cd92e1a767feed96335a17d6a7d8a1b48290",
+      "reviewer.pem": "7866c9b31f2b66d123b1b36869c5cbaf330a802dbe872f7873bf7cdc18728fe6",
+      "verdict/gates.json": "c445fd3e0dac63e80acd14e2603e3040bf8be555df620eae9d3f3764d58cb002",
+      "verdict/trace.json": "578d76da662ec371def1311305e9e8e4bf1a320883b82062a4e365e606bf0dde"
+    },
+    "failed_checks": [
+      "trace",
+      "semantic"
+    ],
+    "independently_ast_grounded_links": 19,
+    "inferred_design_links": 1,
+    "metrics": {
+      "Cons": 0,
+      "Cov_expected": 0.8333333333333334,
+      "Cov_req": 0.6666666666666666,
+      "Cov_scn": 0.8333333333333334,
+      "Cov_task": 0.9090909090909091,
+      "Green": 1,
+      "Q_hidden": 0.9666666666666667,
+      "R": 1
+    },
+    "passed": false,
+    "signature": "Ed25519",
+    "verified_trace_links": 16
+  },
+  "status": "failed",
+  "tests": {
+    "hidden": {
+      "missing": 0,
+      "observed": 30,
+      "passed": 29,
+      "report_sha256": "bd7e9b6fd171cd57a8db3ec932aae457f187833ea8c6ea38fd2a6d017611a752",
+      "required": 30
+    },
+    "public": {
+      "missing": 0,
+      "observed": 109,
+      "passed": 109,
+      "report_sha256": "32a7a5b7408d0a55578918d990f36147eff1b26b9195a31e1c04bcbd17167cd2",
+      "required": 68
+    }
+  },
+  "trace_tool_limitation": {
+    "affected_public_scenarios": [
+      "SCN-LIM-03.1",
+      "SCN-LIM-03.3",
+      "SCN-LIM-05.2"
+    ],
+    "rejected_python_assertions_after_nested_function": 3
+  },
+  "tracked_changes": 22
+}
