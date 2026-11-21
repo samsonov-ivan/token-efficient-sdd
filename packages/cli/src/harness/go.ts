@@ -4,6 +4,11 @@ import { digest, readJson } from './io.js';
 
 export const goURL = 'https://opencode.ai/inference/go/openai/v1';
 const catalog = 'https://opencode.ai/console/api/v1/models';
+export const goVariants = ['low', 'high', 'max'] as const;
+export type GoVariant = (typeof goVariants)[number];
+export function isGoVariant(value: unknown): value is GoVariant {
+  return goVariants.some((variant) => variant === value);
+}
 export async function goCatalog(model: string) {
   const apiKey = process.env.OPENCODE_API_KEY;
   if (!apiKey)
@@ -48,30 +53,42 @@ export async function goCatalog(model: string) {
     catalog,
   };
 }
-export function smokeReceipt(out: string, model: string, sha: string) {
-  return join(out, '.go-smoke', `${digest(JSON.stringify([model, sha]))}.json`);
+export function smokeReceipt(out: string, model: string, sha: string, variant?: GoVariant) {
+  const inputs = variant ? [model, sha, variant] : [model, sha];
+  return join(out, '.go-smoke', `${digest(JSON.stringify(inputs))}.json`);
 }
-export function verifySmoke(out: string, model: string, sha: string) {
-  const file = smokeReceipt(out, model, sha);
+export function verifySmoke(out: string, model: string, sha: string, variant?: GoVariant) {
+  const file = smokeReceipt(out, model, sha, variant);
   if (!existsSync(file))
     throw new Error(
-      'Complete an isolated --go-smoke with the same model and code before running B0',
+      'Complete an isolated --go-smoke with the same model, code and variant before running B0',
     );
   const { run_id, ledger_hash } = readJson<{ run_id: string; ledger_hash: string }>(file);
   if (typeof run_id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(run_id))
     throw new Error(
       'Go subscription needs a fresh live smoke after the quota reset or billing repair',
     );
-  const m = readJson<{ dry_run: boolean; model: string; purpose: string; status: string }>(
-    join(out, run_id, 'manifest.json'),
-  );
-  if (m.dry_run || m.model !== model || m.status !== 'complete' || m.purpose !== 'go-smoke')
+  const m = readJson<{
+    dry_run: boolean;
+    model: string;
+    purpose: string;
+    status: string;
+    params?: { variant?: GoVariant; reasoning_effort?: string };
+  }>(join(out, run_id, 'manifest.json'));
+  if (
+    m.dry_run ||
+    m.model !== model ||
+    m.status !== 'complete' ||
+    m.purpose !== 'go-smoke' ||
+    m.params?.variant !== variant ||
+    (variant && m.params?.reasoning_effort !== variant)
+  )
     throw new Error('Missing completed live Go smoke');
   if (digest(readFileSync(join(out, run_id, 'raw/relay.jsonl'))) !== ledger_hash)
     throw new Error('Smoke ledger changed');
 }
 
-export function validSubscriptionLedger(file: string) {
+export function validSubscriptionLedger(file: string, variant?: GoVariant) {
   if (!existsSync(file)) return false;
   const rows = readFileSync(file, 'utf8')
     .trim()
@@ -88,6 +105,7 @@ export function validSubscriptionLedger(file: string) {
     ended.size === ends.length &&
     ids.size === ended.size &&
     Array.from(ids).every((id) => typeof id === 'string' && ended.has(id)) &&
+    (!variant || begins.every((row) => row.reasoning_effort === variant)) &&
     Array.from(ended.values()).every(
       (row) =>
         row.complete === true &&

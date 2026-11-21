@@ -2,6 +2,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
+import { type GoVariant, isGoVariant } from './go.js';
 
 const GO = 'https://opencode.ai/inference/go/openai/v1';
 const CHAT = '/chat/completions';
@@ -21,7 +22,7 @@ const HOP_HEADERS = [
 ];
 
 type Json = Record<string, unknown>;
-type Options = { runDir: string; model: string } & (
+type Options = { runDir: string; model: string; variant?: GoVariant } & (
   | { fixture: true; upstream: string }
   | { fixture?: false; apiKey: string }
 );
@@ -280,13 +281,33 @@ export async function startUsageRelay(options: Options) {
       sendError(res, 400, 'OpenCode Go requires the coding client and session headers');
       return;
     }
+    const candidate = input.json.reasoning_effort;
+    const reasoningEffort = isGoVariant(candidate) && !secretIn(candidate) ? candidate : undefined;
     const correlation = {
       session_id: safeId(req.headers['x-frugal-session-id']) ?? routeSession,
       user_id: safeId(req.headers['x-frugal-message-id']),
       assistant_id: safeId(req.headers['x-frugal-assistant-id']),
       agent: safeId(req.headers['x-frugal-agent']),
       requested_model: model,
+      reasoning_effort: reasoningEffort,
     };
+    const id = randomUUID();
+    write({ event: 'begin', id, ts: new Date().toISOString(), ...correlation });
+    if (options.variant && reasoningEffort !== options.variant) {
+      blocked = true;
+      const issue = 'OpenCode Go reasoning effort differs from the selected variant';
+      write({
+        event: 'end',
+        id,
+        ts: new Date().toISOString(),
+        ...correlation,
+        status: 400,
+        complete: false,
+        issues: [issue],
+      });
+      sendError(res, 400, issue);
+      return;
+    }
     const streamOptions = object(input.json.stream_options);
     const body =
       input.json.stream === true && streamOptions?.include_usage !== true
@@ -295,8 +316,6 @@ export async function startUsageRelay(options: Options) {
             stream_options: { ...streamOptions, include_usage: true },
           })
         : input.body;
-    const id = randomUUID();
-    write({ event: 'begin', id, ts: new Date().toISOString(), ...correlation });
     const capture = new Capture();
     const guard = new CredentialCheck(secrets);
     let status: number | null = null;

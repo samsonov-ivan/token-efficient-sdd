@@ -99,6 +99,9 @@ describe('isolated run lifecycle', () => {
     }
     expect(await run([...args, '--resume'])).toBe(0);
     expect(existsSync(join(out, 'test-1-base-a2'))).toBe(false);
+    await expect(run([...args, '--variant', 'max', '--resume'])).rejects.toThrow(
+      'Frozen run inputs changed',
+    );
     writeFileSync(join(input, 'requirement.md'), 'Changed');
     await expect(run([...args, '--resume'])).rejects.toThrow('Frozen run inputs changed');
   }, 60000);

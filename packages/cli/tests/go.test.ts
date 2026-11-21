@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { validSubscriptionLedger } from '../src/harness/go.js';
+import { smokeReceipt, validSubscriptionLedger } from '../src/harness/go.js';
 
 it('requires matching completed requests, zero balance charges and a measured Go allowance', () => {
   const file = join(mkdtempSync(join(tmpdir(), 'frugal-go-billing-')), 'ledger.jsonl');
@@ -25,4 +25,23 @@ it('requires matching completed requests, zero balance charges and a measured Go
   expect(check(begin, { ...end, usage: { cost: 0, opencode: { billing_source: 'free' } } })).toBe(
     false,
   );
+});
+
+it('uses a separate smoke receipt for each variant and verifies all request efforts', () => {
+  const out = mkdtempSync(join(tmpdir(), 'frugal-go-variant-'));
+  const model = 'opencode-go/deepseek-v4.1-flash';
+  expect(smokeReceipt(out, model, 'sha', 'max')).not.toBe(smokeReceipt(out, model, 'sha'));
+  expect(smokeReceipt(out, model, 'sha', 'max')).not.toBe(smokeReceipt(out, model, 'sha', 'low'));
+  const file = join(out, 'relay.jsonl');
+  const begin = { id: 'one', event: 'begin', reasoning_effort: 'max' };
+  const end = {
+    id: 'one',
+    event: 'end',
+    complete: true,
+    status: 200,
+    usage: { cost: 0, opencode: { billing_source: 'go', allowance: 0.001 } },
+  };
+  writeFileSync(file, `${JSON.stringify(begin)}\n${JSON.stringify(end)}\n`);
+  expect(validSubscriptionLedger(file, 'max')).toBe(true);
+  expect(validSubscriptionLedger(file, 'low')).toBe(false);
 });

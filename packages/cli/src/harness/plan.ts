@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { parse } from 'yaml';
+import { type GoVariant, isGoVariant } from './go.js';
 import { digest, git, hashTree, readJson, slug } from './io.js';
 export type Mode = 'baseline' | 'optimized' | 'ablation';
 export type Flag = boolean | number | 'auto';
@@ -11,6 +12,7 @@ type Budget = {
   mode: string;
   feature: string;
   model: string;
+  variant?: GoVariant;
   maximum_cost: number;
   estimated_cost_per_arm: number;
   quota_available: number;
@@ -22,6 +24,7 @@ export function parsePlan(argv: string[]) {
       mode: { type: 'string' },
       feature: { type: 'string' },
       model: { type: 'string' },
+      variant: { type: 'string' },
       runs: { type: 'string' },
       series: { type: 'string' },
       resume: { type: 'boolean' },
@@ -93,6 +96,14 @@ export function parsePlan(argv: string[]) {
   const requested = v.model ?? budget?.model ?? (dry ? 'mock/replay' : '');
   if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_./:-]+$/.test(requested))
     throw new Error('Expected --model provider/model-id');
+  const variant = v.variant ?? budget?.variant;
+  if (
+    variant !== undefined &&
+    (requested !== 'opencode-go/deepseek-v4.1-flash' || !isGoVariant(variant))
+  )
+    throw new Error(
+      '--variant currently supports low, high or max on opencode-go/deepseek-v4.1-flash',
+    );
   if (
     !dry &&
     git(project, [
@@ -149,7 +160,8 @@ export function parsePlan(argv: string[]) {
       total > budget.maximum_cost ||
       total > budget.quota_available ||
       [budget.runs, budget.mode, budget.feature, budget.model].join('|') !==
-        [runs, mode, feature, requested].join('|')
+        [runs, mode, feature, requested].join('|') ||
+      budget.variant !== variant
     )
       throw new Error(
         'Live series requires a matching registered experiment, estimate +30%, budget and available quota',
@@ -215,6 +227,7 @@ export function parsePlan(argv: string[]) {
     requirementsHash: digest(requirements),
     expectedHash: hashTree(join(inputs, 'expected.yaml')),
     requested,
+    variant,
     model: dry && !fixture ? 'mock/replay' : requested,
     sha: git(project, ['rev-parse', 'HEAD']),
   };

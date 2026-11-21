@@ -21,7 +21,7 @@ const moduleUsage: Partial<Record<Command, string>> = {
   gates: `${qualityUsage} --evidence FILE`,
   meter: '<run-dir> [--out <dir>]',
   report: '<runs-dir> [options]',
-  run: '--mode <mode> --feature <id> --model <id> [--runs N] [--dry-run]',
+  run: '--mode <mode> --feature <id> --model <id> [--variant <name>] [--runs N] [--dry-run]',
   trace: `${qualityUsage} --evidence FILE`,
 };
 

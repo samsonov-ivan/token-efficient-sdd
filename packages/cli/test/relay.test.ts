@@ -1,9 +1,17 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { GoVariant } from '../src/harness/go.js';
+import { command } from '../src/harness/io.js';
 import { startUsageRelay } from '../src/harness/relay.js';
+import {
+  createSettings,
+  platformBin,
+  runnerEnvironment,
+  withGoVariant,
+} from '../src/harness/runner.js';
 
 const model = 'deepseek-v4.1-flash';
 const usage = {
@@ -39,6 +47,7 @@ afterEach(async () => {
 
 async function setup(
   upstream: (req: IncomingMessage, res: ServerResponse) => Promise<void> | void,
+  variant?: GoVariant,
 ) {
   const runDir = await mkdtemp(join(tmpdir(), 'frugal-go-relay-'));
   cleanups.push(() => rm(runDir, { recursive: true, force: true }));
@@ -56,6 +65,7 @@ async function setup(
     fixture: true,
     upstream: `http://127.0.0.1:${fixtureAddress.port}/native/v1`,
     model: `opencode-go/${model}`,
+    variant,
     runDir,
   });
   cleanups.push(() => relay.close());
@@ -93,6 +103,72 @@ const requestBody = JSON.stringify({
 const streamHeaders = { 'content-type': 'text/event-stream', 'x-request-id': 'req-333' };
 
 describe('OpenCode Go usage relay', () => {
+  it('transmits the same pinned OpenCode variant for each B0 stage', async () => {
+    const efforts: unknown[] = [];
+    const { relay, ledger } = await setup(async (req, res) => {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      efforts.push(JSON.parse(Buffer.concat(chunks).toString()).reasoning_effort);
+      res
+        .writeHead(200, streamHeaders)
+        .end(
+          frame({
+            choices: [
+              { index: 0, delta: { role: 'assistant', content: 'ready' }, finish_reason: null },
+            ],
+          }) +
+            frame({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) +
+            last,
+        );
+    }, 'max');
+    const root = await mkdtemp(join(tmpdir(), 'frugal-go-variant-cli-'));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const repo = join(root, 'repo');
+    await mkdir(repo);
+    const env = runnerEnvironment(root);
+    env.PATH = process.env.PATH ?? '';
+    env.FRUGAL_RELAY_TOKEN = relay.token;
+    const fullModel = `opencode-go/${model}`;
+    createSettings(env, fullModel, `http://127.0.0.1:${relay.port}/v1`, null, true);
+    const binary = platformBin(process.cwd(), 'opencode');
+    expect((await command(binary, ['--version'], { env, cwd: repo })).stdout.trim()).toBe('1.19.6');
+    for (const stage of ['spec', 'apply', 'review', 'fix', 'verify']) {
+      const result = await command(
+        binary,
+        withGoVariant(
+          ['run', '--format', 'json', '--model', fullModel, '--title', stage, '--', 'Reply ready.'],
+          'max',
+        ),
+        { env, cwd: repo },
+      );
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain('"type":"step_finish"');
+    }
+    expect(efforts).toEqual(['max', 'max', 'max', 'max', 'max']);
+    expect(
+      (await ledger()).filter((row) => row.event === 'begin').map((row) => row.reasoning_effort),
+    ).toEqual(efforts);
+  }, 30000);
+
+  it('blocks a different or unallowlisted reasoning effort before the upstream', async () => {
+    let forwarded = false;
+    const { request, ledger } = await setup((_req, res) => {
+      forwarded = true;
+      res.writeHead(200, streamHeaders).end(last);
+    }, 'max');
+    const response = await request(
+      JSON.stringify({ ...JSON.parse(requestBody), reasoning_effort: 'private text' }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { message: expect.stringContaining('selected variant') },
+    });
+    expect(forwarded).toBe(false);
+    const rows = await ledger();
+    expect(rows.at(-1)).toMatchObject({ event: 'end', complete: false, status: 400 });
+    expect(JSON.stringify(rows)).not.toContain('private text');
+  });
+
   it('streams original SSE before completion and stores usage apart from headers and prompt', async () => {
     let forwarded: { url?: string; headers: IncomingMessage['headers']; body: string } | undefined;
     let finish!: () => void;

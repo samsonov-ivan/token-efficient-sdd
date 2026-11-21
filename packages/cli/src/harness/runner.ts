@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import type { GoVariant } from './go.js';
 import { checked, command, writeJson } from './io.js';
 import type { Result } from './io.js';
 
@@ -9,6 +10,12 @@ export type ProcessOptions = {
   secretEnv?: Record<string, string>;
   onLine?: (line: string, stderr: boolean) => void;
 };
+export function withGoVariant(args: string[], variant?: GoVariant) {
+  if (!variant) return args;
+  const [subcommand, ...options] = args;
+  if (subcommand !== 'run') throw new Error('OpenCode model variants apply only to run');
+  return ['run', '--variant', variant, ...options];
+}
 export function runnerEnvironment(root: string): Record<string, string> {
   const names = {
     HOME: 'home',
