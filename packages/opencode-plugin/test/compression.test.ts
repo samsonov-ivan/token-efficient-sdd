@@ -249,12 +249,17 @@ describe('host integration', () => {
     const result = { title: 'tests', output: pytest, metadata: { exit: 1, truncated: true } };
     await after(input, result);
     expect(result.output).toBe(pytest);
+    expect(result.metadata).toEqual({ exit: 1, truncated: true });
     result.metadata.truncated = false;
     await after({ ...input, tool: 'read' }, result);
     expect(result.output).toBe(pytest);
     await after(input, result);
     checkArchive(result.output, pytest);
-    expect(result.metadata).toEqual({ exit: 1, truncated: false });
+    expect(result.metadata).toEqual({
+      exit: 1,
+      truncated: false,
+      frugalToolOutputSha256: createHash('sha256').update(pytest).digest('hex'),
+    });
   });
 
   it('uses the V2 completed shell result in content and code mode, keeping host notices', async () => {

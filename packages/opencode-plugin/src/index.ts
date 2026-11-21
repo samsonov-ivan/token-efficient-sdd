@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Hooks, PluginInput } from '@opencode-ai/plugin';
@@ -72,12 +73,14 @@ export default {
           typeof result.output !== 'string'
         )
           return;
-        result.output = compress(
-          directory,
-          input.args?.command,
-          result.output,
-          result.metadata?.exit,
-        );
+        const raw = result.output;
+        const short = compress(directory, input.args?.command, raw, result.metadata?.exit);
+        if (short === raw) return;
+        result.output = short;
+        result.metadata = {
+          ...result.metadata,
+          frugalToolOutputSha256: createHash('sha256').update(raw).digest('hex'),
+        };
       };
     }
     return hooks;
