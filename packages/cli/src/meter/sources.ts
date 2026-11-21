@@ -4,6 +4,7 @@ import { createReadStream, existsSync, readdirSync, readFileSync, statSync } fro
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
+import { Relay } from './relay.js';
 import { count, type Entry, id, normalize, record, type Tokens, timestamp } from './usage.js';
 
 export interface Observation {
@@ -33,6 +34,9 @@ export class Inputs {
     string,
     { session: string; model: string | null; provider: string | null }
   >();
+  readonly userByMessage = new Map<string, string>();
+  readonly agentByMessage = new Map<string, string>();
+  hasRelay = false;
   readonly providerIds = new Map<string, string>();
   readonly retryRefs = new Map<string, string>();
   readonly providerStandalone = new Set<string>();
@@ -66,6 +70,8 @@ export class Inputs {
     if (value.role !== 'assistant') return;
     const key = id(value.id);
     const meta = { session, model: asText(value.modelID), provider: asText(value.providerID) };
+    if (asText(value.parentID)) this.userByMessage.set(key, id(value.parentID));
+    if (asText(value.agent)) this.agentByMessage.set(key, id(value.agent));
     const previous = this.assistant.get(key);
     if (previous && JSON.stringify(previous) !== JSON.stringify(meta))
       this.issues.add(`${ref}: conflicting assistant metadata`);
@@ -233,7 +239,7 @@ function readDatabase(data: Inputs, root: string) {
     );
   }
   for (const row of query(
-    "SELECT id,session_id,json_extract(data,'$.modelID') AS modelID,json_extract(data,'$.providerID') AS providerID,json_type(data,'$.error') AS errorType FROM message WHERE json_extract(data,'$.role')='assistant' ORDER BY id",
+    "SELECT id,session_id,json_extract(data,'$.modelID') AS modelID,json_extract(data,'$.providerID') AS providerID,json_extract(data,'$.parentID') AS parentID,json_extract(data,'$.agent') AS agent,json_type(data,'$.error') AS errorType FROM message WHERE json_extract(data,'$.role')='assistant' ORDER BY id",
   )) {
     data.message(
       { ...row, error: row.errorType != null && row.errorType !== 'null', role: 'assistant' },
@@ -285,8 +291,8 @@ export async function sourceHashes(root: string): Promise<Record<string, string>
   const inputs = [
     ...rawFiles(root, 'raw/events.jsonl', 'raw/events', '.jsonl'),
     ...rawFiles(root, 'raw/export.json', 'raw/exports', '.json'),
-    ...['raw/opencode.db', 'raw/provider.jsonl', 'raw/opencode.db-wal'].filter((file) =>
-      existsSync(join(root, file)),
+    ...['raw/opencode.db', 'raw/provider.jsonl', 'raw/opencode.db-wal', 'raw/relay.jsonl'].filter(
+      (file) => existsSync(join(root, file)),
     ),
   ].sort();
   const hashes: Record<string, string> = {};
@@ -298,7 +304,7 @@ export async function sourceHashes(root: string): Promise<Record<string, string>
   return hashes;
 }
 
-export async function collect(root: string) {
+export async function collect(root: string, provider: string) {
   const data = new Inputs();
   for (const file of rawFiles(root, 'raw/events.jsonl', 'raw/events', '.jsonl')) {
     await lines(data, root, file, (event, ref) => {
@@ -330,6 +336,13 @@ export async function collect(root: string) {
   if (existsSync(join(root, 'raw/provider.jsonl'))) {
     data.hasProvider = true;
     await lines(data, root, 'raw/provider.jsonl', (row, ref) => data.provider(row, ref));
+  }
+  if (existsSync(join(root, 'raw/relay.jsonl'))) {
+    data.hasProvider = true;
+    data.hasRelay = true;
+    const relay = new Relay();
+    await lines(data, root, 'raw/relay.jsonl', (row, ref) => relay.add(row, ref));
+    relay.reconcile(data, provider);
   }
   return data;
 }

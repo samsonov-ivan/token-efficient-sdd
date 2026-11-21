@@ -144,7 +144,10 @@ function ledger(manifest: Entry, data: Inputs) {
       data.issues.add(`${key}: step missing from provider ledger`);
     if (hasProvider && !standalone && !hasStorage && !hasEvent)
       data.issues.add(`${key}: provider step missing from opencode sources`);
-    const known = rows.find((row) => row.tokens !== null)?.tokens ?? null;
+    const go = rows.find((row) => row.origin === 'provider' && row.schema === 'opencode-go-chat');
+    const known = go?.tokens ?? rows.find((row) => row.tokens !== null)?.tokens ?? null;
+    const reference = go ?? first;
+    let cacheReassigned = false;
     let conflict = false;
     const costs = new Set(
       rows.filter((r) => r.origin !== 'provider' && r.cost !== null).map((r) => r.cost),
@@ -160,7 +163,22 @@ function ledger(manifest: Entry, data: Inputs) {
         (row.provider && row.provider !== actualProvider)
       )
         conflict = true;
-      if (known && row.tokens && !equal(known, row.tokens)) conflict = true;
+      if (known && row.tokens && !equal(known, row.tokens)) {
+        // V1 assigns gateway cache writes to uncached input. Accept only that exact
+        // redistribution when the independent API response exposes the billing components.
+        const stored = row.tokens;
+        const compatible =
+          go &&
+          row.origin !== 'provider' &&
+          stored.t_cache_write === 0 &&
+          known.t_cache_write > 0 &&
+          stored.t_in === known.t_in + known.t_cache_write &&
+          stored.t_cache_read === known.t_cache_read &&
+          stored.t_out === known.t_out &&
+          stored.t_reasoning === known.t_reasoning;
+        if (compatible) cacheReassigned = true;
+        else conflict = true;
+      }
     }
     const usage = conflict ? 'conflict' : !known || rpt(known) === 0 ? 'unknown' : 'known';
     if (usage !== 'known') data.issues.add(`${key}: ${usage} usage`);
@@ -169,9 +187,10 @@ function ledger(manifest: Entry, data: Inputs) {
     const countable = usage === 'known' ? known : null;
     if (message && !standalone)
       finishByMessage.set(message, (finishByMessage.get(message) ?? 0) + 1);
-    if (hasStorage && countable) {
+    const storedTokens = rows.find((row) => row.origin === 'storage' && row.tokens)?.tokens;
+    if (storedTokens && countable) {
       const previous = tokensBySession.get(first.session) ?? emptyTokens();
-      for (const f of fields) previous[f] += countable[f];
+      for (const f of fields) previous[f] += storedTokens[f];
       tokensBySession.set(first.session, previous);
     }
     observedSessions.add(first.session);
@@ -197,13 +216,16 @@ function ledger(manifest: Entry, data: Inputs) {
       event_key: key,
       request_id: linkedProvider?.request ?? null,
       attempt: linkedProvider?.attempt ?? 1,
-      source_schema: first.schema,
+      source_schema: reference.schema,
       usage_status: usage,
       ts,
       ...tokens,
-      cost: conflict ? null : ([...costs][0] ?? linkedProvider?.cost ?? null),
-      raw_ref: first.ref,
-      raw: first.raw,
+      cost: conflict ? null : (linkedProvider?.cost ?? [...costs][0] ?? null),
+      ...(go
+        ? { billing: record(go.raw.opencode), gateway_cache_write_reassigned: cacheReassigned }
+        : {}),
+      raw_ref: reference.ref,
+      raw: reference.raw,
       sources: [...new Set(rows.map((row) => row.ref))].sort(),
     });
   }
@@ -268,17 +290,53 @@ function totals(calls: Calls) {
 export async function meterRun(runDir: string, outputDir = runDir) {
   const manifest = record(JSON.parse(readFileSync(join(runDir, 'manifest.json'), 'utf8')));
   const inputHashes = await sourceHashes(runDir);
-  const data = await collect(runDir);
+  const data = await collect(runDir, id(manifest.provider_id ?? manifest.provider));
+  const rules = record(manifest.metering ?? {});
+  if (rules.relay_required === true && !data.hasRelay)
+    data.issues.add('required raw/relay.jsonl is missing');
   if (JSON.stringify(inputHashes) !== JSON.stringify(await sourceHashes(runDir)))
     data.issues.add('raw inputs changed during import');
   const dry_run = manifest.dry_run === true;
   const calls = ledger(manifest, data);
+  const providerRows = new Map(
+    data.rows.filter((r) => r.origin === 'provider').map((r) => [r.request, r]),
+  );
+  const providerRpt = [...providerRows.values()].reduce(
+    (sum, row) => sum + (row.tokens ? rpt(row.tokens) : 0),
+    0,
+  );
+  const goCalls = calls.filter((c) => c.billing);
+  const billingSum = (key: string) =>
+    goCalls.length && goCalls.every((c) => typeof c.billing?.[key] === 'number')
+      ? goCalls.reduce((sum, call) => sum + Number(call.billing?.[key]), 0)
+      : null;
   if (!data.hasEvents) data.issues.add('missing nonempty CLI event stream');
   if (!data.hasDb && !(dry_run && data.hasExport))
     data.issues.add('missing usable isolated opencode.db');
   if (!calls.length) data.issues.add('no measured calls');
   if (!dry_run && !data.hasProvider && record(manifest.metering ?? {}).title_disabled !== true)
     data.issues.add('background title usage unverified');
+  if (Array.isArray(rules.allowed_billing_sources) || rules.max_balance_charge != null) {
+    let charge = 0;
+    for (const call of calls) {
+      if (
+        Array.isArray(rules.allowed_billing_sources) &&
+        !rules.allowed_billing_sources.includes(call.billing?.billing_source)
+      )
+        data.issues.add(`${call.event_key}: missing or unauthorized billing source`);
+      if (
+        rules.max_balance_charge != null &&
+        (call.billing == null ||
+          typeof call.raw.cost !== 'number' ||
+          !Number.isFinite(call.raw.cost) ||
+          call.raw.cost < 0)
+      )
+        data.issues.add(`${call.event_key}: missing or invalid provider balance charge`);
+      else charge += Number(call.raw.cost ?? 0);
+    }
+    if (typeof rules.max_balance_charge === 'number' && charge > rules.max_balance_charge)
+      data.issues.add('provider balance charge exceeds run limit');
+  }
   const issues = [...data.issues].sort();
   const complete = issues.length === 0;
   const sums = totals(calls);
@@ -307,6 +365,28 @@ export async function meterRun(runDir: string, outputDir = runDir) {
     cost: complete ? sums.cost : null,
     by_stage,
     coverage: data.hasProvider ? 'provider-ledger' : 'opencode-only',
+    ...(data.hasRelay
+      ? {
+          relay: {
+            requests_with_usage: providerRows.size,
+            known_rpt: providerRpt,
+            relative_discrepancy:
+              complete && providerRpt > 0
+                ? Math.abs(sums.known_rpt - providerRpt) / providerRpt
+                : null,
+          },
+        }
+      : {}),
+    ...(goCalls.length
+      ? {
+          opencode_billing: {
+            list_cost: billingSum('list_cost'),
+            allowance: billingSum('allowance'),
+            cache_write_reassignments: goCalls.filter((c) => c.gateway_cache_write_reassigned)
+              .length,
+          },
+        }
+      : {}),
     raw_sha256: inputHashes,
     sha256: { 'calls.jsonl': hash(callText), 'stages.csv': hash(csv) },
   };
