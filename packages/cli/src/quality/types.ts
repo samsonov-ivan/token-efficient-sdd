@@ -22,7 +22,31 @@ export interface Link {
   inferred?: boolean;
   reason?: string;
 }
+export type ArtifactKind = 'requirement' | 'scenario' | 'task';
+export interface MissingId {
+  kind: ArtifactKind;
+  path: string;
+  text: string;
+  parent?: string;
+  token: string;
+}
+export interface Alias {
+  kind: ArtifactKind;
+  path: string;
+  text: string;
+  parent?: string;
+  id: string;
+  reason: string;
+}
+export interface ArtifactLink extends SourceRef {
+  task?: string;
+  refs: string[];
+  reason: string;
+}
 export interface Evidence {
+  aliases?: Alias[];
+  artifact_links?: ArtifactLink[];
+  exempt_tasks?: { task: string; reason: string }[];
   final_commit: string;
   suites: Suite[];
   links: Link[];
@@ -51,12 +75,16 @@ export interface SpecRequirement {
   scenario_text?: Record<string, string>;
 }
 export interface SpecTask {
+  sourceLine?: number;
   id: string;
   text: string;
   refs: string[];
   done: boolean;
 }
 export interface Change {
+  missingIds?: MissingId[];
+  designRefs?: string[];
+  baseRefs?: string[];
   requirements: SpecRequirement[];
   tasks: SpecTask[];
   design: string;

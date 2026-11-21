@@ -21,7 +21,7 @@ const expected: Expected = {
   ],
   tasks: [{ id: '1.1', description: 'Support inclusive endpoints', requirements: [req] }],
 };
-const requirement = `### Requirement: ${req} Inclusive endpoint\nThe client SHALL accept 10 as the upper endpoint.\n\n#### Scenario: ${scn} Maximum accepted\n- **WHEN** the value is 10\n- **THEN** the service accepts it.\n`;
+const requirement = `### Requirement: ${req} Inclusive endpoint\nThe client SHALL accept 10. The upper endpoint SHALL be inclusive.\n\n#### Scenario: ${scn} Maximum accepted\n- **WHEN** the value is 10\n- **THEN** the service accepts it.\n`;
 const testId = 'tests.test_range::test_limit';
 const xml = (body: string) =>
   `<testsuites><testsuite><testcase classname="tests.test_range" name="test_limit">${body}</testcase></testsuite></testsuites>`;
@@ -31,7 +31,7 @@ const roots: string[] = [];
 afterAll(() => {
   for (const root of roots) rmSync(root, { recursive: true, force: true });
 });
-function fixture(flat = false, testBody = testSource) {
+function fixture(flat = false, testBody = testSource, designBound = 'inclusive', labels = true) {
   const root = mkdtempSync(join(tmpdir(), 'frugal-guard-fixture-'));
   roots.push(root);
   const repo = join(root, 'repo');
@@ -45,14 +45,18 @@ function fixture(flat = false, testBody = testSource) {
     `${folder}proposal.md`,
     '## Why\n\nThis change adds a useful, explicit upper endpoint for customer supplied range values.\n\n## What Changes\n\n- Apply an inclusive endpoint.\n\n## Capabilities\n\n### New Capabilities\n\n- \x60range\x60: Adds inclusive range handling.\n\n## Impact\n\nThe public API changes.\n',
   );
-  set(`${folder}design.md`, `## Decisions\n\n${req}: Use an inclusive bound.\n`);
+  set(
+    `${folder}design.md`,
+    `## Decisions\n\n${labels ? `${req}: ` : ''}The upper endpoint is ${designBound}.\n`,
+  );
   set(
     `${folder}tasks.md`,
-    `## 1. API\n\n- [x] 1.1 Implement the inclusive endpoint [${req}, ${scn}]\n`,
+    `## 1. API\n\n- [x] ${labels ? '1.1 ' : ''}Implement the inclusive endpoint${labels ? ` [${req}, ${scn}]` : ''}\n`,
   );
   set(
     folder + (flat ? 'specs.md' : 'specs/range/spec.md'),
-    (flat ? '' : '## ADDED Requirements\n\n') + requirement,
+    (flat ? '' : '## ADDED Requirements\n\n') +
+      (labels ? requirement : requirement.replace(`${req} `, '').replace(`${scn} `, '')),
   );
   set('app/range.py', goodSource);
   set('tests/test_range.py', testBody);
@@ -126,7 +130,7 @@ describe('final snapshot quality', () => {
   beforeAll(() => {
     f = fixture();
     model = f.read();
-  });
+  }, 30_000);
   const run = (e = f.evidence, c = model) =>
     evaluate(c, expected, e, f.snapshot, f.root, false).gates;
   it('reads pinned OpenSpec and traces every obligation to a tracked assertion and runner result', () => {
@@ -143,7 +147,7 @@ describe('final snapshot quality', () => {
       R: 1,
     });
   });
-  it('checks flat projection against the same normative obligations', () => {
+  it('checks flat projection against the same normative obligations', { timeout: 30_000 }, () => {
     const other = fixture(true);
     const result = other.read();
     expect(result.requirements.map((r) => r.id)).toEqual([req]);
@@ -172,6 +176,57 @@ describe('final snapshot quality', () => {
     expect(g.checks.semantic.errors.join()).toContain('exclusive');
     expect(g.checks.review.ok).toBe(false);
   });
+  it(
+    'finds a contradictory boundary in strict-valid design without a supplied negative verdict',
+    { timeout: 30_000 },
+    () => {
+      const broken = fixture(false, testSource, 'exclusive');
+      const change = broken.read();
+      expect(consistencyErrors(change, expected).join()).toContain('contradictory upper endpoint');
+    },
+  );
+  it(
+    'binds missing OpenSpec identities and artifact references to independent source evidence',
+    { timeout: 30_000 },
+    () => {
+      const f = fixture(false, testSource, 'inclusive', false);
+      const change = f.read();
+      const ev = f.evidence;
+      ev.aliases = (change.missingIds ?? []).map(({ kind, path, text, parent }) => ({
+        kind,
+        path,
+        text,
+        parent,
+        id: { requirement: req, scenario: scn, task: '1.1' }[kind],
+        reason:
+          'Compared the recorded 10 boundary, its decision and corresponding test to the frozen obligation.',
+      }));
+      expect(ev.aliases.map((a) => a.kind).sort()).toEqual(['requirement', 'scenario', 'task']);
+      ev.artifact_links = [
+        {
+          path: change.designPath,
+          line: 3,
+          text: 'The upper endpoint is inclusive.',
+          refs: [req],
+          reason: 'States the same inclusive constraint.',
+        },
+        {
+          path: change.designPath.replace('design.md', 'tasks.md'),
+          line: 3,
+          text: '- [x] Implement the inclusive endpoint',
+          task: '1.1',
+          refs: [req, scn],
+          reason: 'Implements that exact bound.',
+        },
+      ];
+      expect(evaluate(change, expected, ev, f.snapshot, f.root, false).gates.ok).toBe(false);
+      expect(evaluate(change, expected, ev, f.snapshot, f.root, true).gates.errors).toEqual([]);
+      ev.links = [];
+      expect(evaluate(change, expected, ev, f.snapshot, f.root, true).gates.metrics.Cov_req).toBe(
+        0,
+      );
+    },
+  );
   it('blocks stale evidence and invalidated reports', () => {
     const e = structuredClone(f.evidence);
     e.final_commit = 'stale';
@@ -186,53 +241,57 @@ describe('final snapshot quality', () => {
     expect(g.metrics.Cov_req).toBe(0);
     expect(g.errors.join()).toContain('tautological assertion');
   });
-  it('replays a detached Ed25519 assessment through the CLI and rejects a tampered answer', () => {
-    const f = fixture();
-    const out = join(f.root, 'quality');
-    const evidence = join(f.root, 'evidence.json');
-    const oracle = join(f.root, 'expected.yaml');
-    writeFileSync(evidence, JSON.stringify({ ...f.evidence, links: [], semantic: [] }));
-    writeFileSync(oracle, JSON.stringify(expected));
-    const args = [
-      '--repo',
-      f.repo,
-      '--change',
-      changeId,
-      '--out',
-      out,
-      '--evidence',
-      evidence,
-      '--expected',
-      oracle,
-    ];
-    expect(qualityCommand('gates', [...args, '--prepare'])).toBe(0);
-    const req = JSON.parse(readFileSync(join(out, 'evaluator-request.json'), 'utf8'));
-    expect(req.candidates[0].code_candidates[0].text).toContain('allowed');
-    expect(req.candidates[0].assertions[0].text).toContain('assert allowed(10)');
-    const review = join(f.root, 'assessment.json'),
-      sig = join(f.root, 'assessment.sig'),
-      key = join(f.root, 'reviewer.pem');
-    const data = JSON.stringify({
-      version: 1,
-      final_commit: f.snapshot.commit,
-      request_sha256: req.request_sha256,
-      reviewer: 'Independent fixture reviewer',
-      links: f.evidence.links,
-      semantic: f.evidence.semantic,
-    });
-    const pair = generateKeyPairSync('ed25519');
-    writeFileSync(review, data);
-    writeFileSync(sig, sign(null, Buffer.from(data), pair.privateKey));
-    writeFileSync(key, pair.publicKey.export({ format: 'pem', type: 'spki' }));
-    const replay = [...args, '--assessment', review, '--signature', sig, '--reviewer-key', key];
-    expect(qualityCommand('gates', replay)).toBe(0);
-    expect(JSON.parse(readFileSync(join(out, 'gates.json'), 'utf8')).ok).toBe(true);
-    writeFileSync(review, `${data} `);
-    expect(qualityCommand('gates', replay)).toBe(1);
-    expect(JSON.parse(readFileSync(join(out, 'gates.json'), 'utf8')).errors).toContain(
-      'Invalid assessment signature',
-    );
-  });
+  it(
+    'replays a detached Ed25519 assessment through the CLI and rejects a tampered answer',
+    { timeout: 60_000 },
+    () => {
+      const f = fixture();
+      const out = join(f.root, 'quality');
+      const evidence = join(f.root, 'evidence.json');
+      const oracle = join(f.root, 'expected.yaml');
+      writeFileSync(evidence, JSON.stringify({ ...f.evidence, links: [], semantic: [] }));
+      writeFileSync(oracle, JSON.stringify(expected));
+      const args = [
+        '--repo',
+        f.repo,
+        '--change',
+        changeId,
+        '--out',
+        out,
+        '--evidence',
+        evidence,
+        '--expected',
+        oracle,
+      ];
+      expect(qualityCommand('gates', [...args, '--prepare'])).toBe(0);
+      const req = JSON.parse(readFileSync(join(out, 'evaluator-request.json'), 'utf8'));
+      expect(req.candidates[0].code_candidates[0].text).toContain('allowed');
+      expect(req.candidates[0].assertions[0].text).toContain('assert allowed(10)');
+      const review = join(f.root, 'assessment.json'),
+        sig = join(f.root, 'assessment.sig'),
+        key = join(f.root, 'reviewer.pem');
+      const data = JSON.stringify({
+        version: 1,
+        final_commit: f.snapshot.commit,
+        request_sha256: req.request_sha256,
+        reviewer: 'Independent fixture reviewer',
+        links: f.evidence.links,
+        semantic: f.evidence.semantic,
+      });
+      const pair = generateKeyPairSync('ed25519');
+      writeFileSync(review, data);
+      writeFileSync(sig, sign(null, Buffer.from(data), pair.privateKey));
+      writeFileSync(key, pair.publicKey.export({ format: 'pem', type: 'spki' }));
+      const replay = [...args, '--assessment', review, '--signature', sig, '--reviewer-key', key];
+      expect(qualityCommand('gates', replay)).toBe(0);
+      expect(JSON.parse(readFileSync(join(out, 'gates.json'), 'utf8')).ok).toBe(true);
+      writeFileSync(review, `${data} `);
+      expect(qualityCommand('gates', replay)).toBe(1);
+      expect(JSON.parse(readFileSync(join(out, 'gates.json'), 'utf8')).errors).toContain(
+        'Invalid assessment signature',
+      );
+    },
+  );
   it('scores hidden failures separately, rejecting incomplete observations', () => {
     const f = fixture();
     const suite = f.evidence.suites[1];

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Snapshot } from './snapshot.js';
-import type { Change, SpecRequirement, SpecTask } from './types.js';
+import type { Change, MissingId, SpecRequirement, SpecTask } from './types.js';
 
 export const requirementPattern = /\bREQ-[A-Z][A-Z0-9-]*-\d+\b/g;
 export const scenarioPattern = /\bSCN-[A-Z][A-Z0-9-]*-\d+\.\d+\b/g;
@@ -20,6 +20,19 @@ export function readChange(
   const prefix = `openspec/changes/${id}/`;
   const errors: string[] = [];
   const warnings: string[] = [];
+  const missingIds: MissingId[] = [];
+  const identify = (
+    kind: MissingId['kind'],
+    path: string,
+    text: string,
+    id?: string,
+    parent?: string,
+  ) => {
+    if (id) return id;
+    const token = `unlabeled-${kind}-${missingIds.length + 1}`;
+    missingIds.push({ kind, path, text, parent, token });
+    return token;
+  };
   const requirements: SpecRequirement[] = [];
   const tasks: SpecTask[] = [];
   const spec = (args: string[]) => {
@@ -84,20 +97,23 @@ export function readChange(
     if (!Array.isArray(change.deltas) || !change.deltas.length)
       throw new Error('OpenSpec emitted no deltas');
     const base = new Map<string, Map<string, { name: string; scenarios: { name: string }[] }>>();
+    const replacedNames = new Map<string, Set<string>>();
+    const readBase = (capability: string) => {
+      if (!base.has(capability)) {
+        const model = spec(['show', capability, '--type', 'spec', '--json']);
+        base.set(capability, new Map(model.requirements.map((r: { name: string }) => [r.name, r])));
+      }
+      return base.get(capability);
+    };
     for (const delta of change.deltas) {
       const path = snapshot.files.has(flat) ? flat : `${prefix}specs/${delta.spec}/spec.md`;
       if (!snapshot.files.has(path)) throw new Error(`Delta source is absent: ${path}`);
       let req = delta.requirement;
       if (['MODIFIED', 'REMOVED', 'RENAMED'].includes(delta.operation)) {
-        if (!base.has(delta.spec)) {
-          const model = spec(['show', delta.spec, '--type', 'spec', '--json']);
-          base.set(
-            delta.spec,
-            new Map(model.requirements.map((r: { name: string }) => [r.name, r])),
-          );
-        }
         const name = delta.operation === 'RENAMED' ? delta.rename.from : req.name;
-        const original = base.get(delta.spec)?.get(name);
+        const original = readBase(delta.spec)?.get(name);
+        if (!replacedNames.has(delta.spec)) replacedNames.set(delta.spec, new Set());
+        replacedNames.get(delta.spec)?.add(name);
         if (!original) {
           errors.push(`Unknown base requirement: ${name}`);
           continue;
@@ -114,18 +130,10 @@ export function readChange(
         if (delta.operation === 'RENAMED') req = { ...original, name: delta.rename.to };
       } else if (delta.operation !== 'ADDED')
         throw new Error(`Unsupported delta: ${delta.operation}`);
-      const reqId = label(req.name, requirementPattern);
-      if (!reqId) {
-        errors.push(`Missing requirement ID in ${path}: ${req.name}`);
-        continue;
-      }
-      const scns = req.scenarios
-        .map((s: { name: string }) => {
-          const scn = label(s.name, scenarioPattern);
-          if (!scn) errors.push(`Missing scenario ID in ${reqId}: ${s.name}`);
-          return scn;
-        })
-        .filter(Boolean);
+      const reqId = identify('requirement', path, req.name, label(req.name, requirementPattern));
+      const scns = req.scenarios.map((s: { name: string }) =>
+        identify('scenario', path, s.name, label(s.name, scenarioPattern), req.name),
+      );
       if (!scns.length) errors.push(`Requirement without scenarios: ${reqId}`);
       requirements.push({
         id: reqId,
@@ -161,13 +169,15 @@ export function readChange(
       const number =
         /^\s*(?:[-*]\s*\[[xX ]\]\s*)?(\d+(?:\.\d+)+)\b/.exec(task.description)?.[1] ??
         /^\s*[-*]\s*\[[xX ]\]\s*(\d+(?:\.\d+)+)\b/.exec(line ?? '')?.[1];
-      if (!number) {
-        errors.push(`Unnumbered task: ${task.description}`);
-        continue;
-      }
       const text: string = task.description;
+      const indexed = Number.isInteger(task.line)
+        ? task.line
+        : rawTaskLines.findIndex(
+            (line) => line.trim().replace(/^[-*]\s*\[[ xX]\]\s*/, '') === text.trim(),
+          ) + 1;
       tasks.push({
-        id: number,
+        sourceLine: indexed || undefined,
+        id: identify('task', `${prefix}tasks.md`, text, number),
         text,
         refs: [...(text.match(requirementPattern) ?? []), ...(text.match(scenarioPattern) ?? [])],
         done: task.done === true,
@@ -181,7 +191,24 @@ export function readChange(
     for (const name of new Set(names))
       if (!tasks.some((t) => t.text.includes(name)))
         warnings.push(`Design file not referenced by a task: ${name}`);
+    const baseRefs = new Set<string>();
+    const changed = new Set(requirements.flatMap((r) => [r.id, ...r.scenarios]));
+    const linked = [...tasks.flatMap((t) => t.refs), ...(design.match(requirementPattern) ?? [])];
+    if (linked.some((id) => !changed.has(id))) {
+      for (const path of snapshot.files.keys()) {
+        const cap = /^openspec\/specs\/(.+)\/spec\.md$/.exec(path)?.[1];
+        if (!cap) continue;
+        for (const req of readBase(cap)?.values() ?? []) {
+          if (replacedNames.get(cap)?.has(req.name)) continue;
+          for (const id of req.name.match(requirementPattern) ?? []) baseRefs.add(id);
+          for (const scn of req.scenarios)
+            for (const id of scn.name.match(scenarioPattern) ?? []) baseRefs.add(id);
+        }
+      }
+    }
     return {
+      missingIds,
+      baseRefs: [...baseRefs].sort(),
       requirements,
       tasks,
       design,

@@ -1,5 +1,6 @@
 import { basename, extname } from 'node:path';
 import { requirementPattern } from './change.js';
+import { resolveIdentities } from './inference.js';
 import { isTestFile, type Snapshot } from './snapshot.js';
 import { inspectSuites } from './suites.js';
 import {
@@ -39,8 +40,37 @@ export function validateExpected(e: Expected) {
   }
 }
 const repeated = (values: string[]) => sorted(values.filter((v, i) => values.indexOf(v) < i));
+// Compare only unconditional boundary statements with an identical subject in the
+// requirement and its cited design paragraph. Other prose goes to semantic review.
+function boundaryConflicts(change: Change): string[] {
+  const errors: string[] = [];
+  const boundaries = (text: string) =>
+    Array.from(
+      text.matchAll(
+        /\b((?:upper|lower) (?:endpoint|bound)(?: of [\w.-]+)?) (?:is|shall be|must be) (inclusive|exclusive)(?=[.;\n]|$)/gi,
+      ),
+      (match) => [match[1].toLowerCase(), match[2].toLowerCase()] as const,
+    );
+  const paragraphs = change.design.split(/\n\s*\n/);
+  for (const req of change.requirements) {
+    const cited = paragraphs.filter((p) => p.match(requirementPattern)?.includes(req.id));
+    for (const [subject, specValue] of boundaries(req.statement ?? '')) {
+      for (const [other, designValue] of boundaries(cited.join('\n'))) {
+        if (other === subject && designValue !== specValue)
+          errors.push(
+            `${req.id} contradictory ${subject}: spec ${specValue}, design ${designValue}`,
+          );
+      }
+    }
+  }
+  return errors;
+}
 export function consistencyErrors(change: Change, e: Expected) {
-  const errors = [...change.errors];
+  const errors = [
+    ...change.errors,
+    ...boundaryConflicts(change),
+    ...(change.missingIds ?? []).map((m) => `Missing ${m.kind} ID at ${m.path}: ${m.text}`),
+  ];
   const real = change.requirements.filter((r) => !r.removed);
   const reqs = new Map(real.map((r) => [r.id, r]));
   const scns = real.flatMap((r) => r.scenarios);
@@ -57,15 +87,20 @@ export function consistencyErrors(change: Change, e: Expected) {
   ]))
     errors.push(`Duplicate ID: ${id}`);
   for (const id of allRefs) if (!usedRefs.has(id)) errors.push(`No task references ${id}`);
-  const designReqs = new Set(change.design.match(requirementPattern) ?? []);
+  const designReqs = new Set([
+    ...(change.design.match(requirementPattern) ?? []),
+    ...(change.designRefs ?? []),
+  ]);
   for (const id of reqs.keys())
     if (!designReqs.has(id)) errors.push(`No design decision for ${id}`);
-  for (const id of designReqs) if (!allRefs.has(id)) errors.push(`Unknown design reference ${id}`);
+  const validRefs = new Set([...allRefs, ...(change.baseRefs ?? [])]);
+  for (const id of designReqs)
+    if (!validRefs.has(id)) errors.push(`Unknown design reference ${id}`);
   for (const task of change.tasks) {
     if (!task.done) errors.push(`Unfinished task ${task.id}`);
     if (!task.refs.length) errors.push(`Task has no obligation: ${task.id}`);
     for (const ref of task.refs)
-      if (!allRefs.has(ref)) errors.push(`Dangling reference ${ref} in task ${task.id}`);
+      if (!validRefs.has(ref)) errors.push(`Dangling reference ${ref} in task ${task.id}`);
   }
   for (const req of e.requirements) {
     if (!reqs.has(req.id)) errors.push(`Missing expected requirement ${req.id}`);
@@ -182,6 +217,7 @@ export function evaluate(
   if (ev.final_commit !== snapshot.commit)
     throw new Error(`Evidence does not match final commit ${snapshot.commit}`);
   validateExpected(e);
+  if (infer) change = resolveIdentities(change, e, ev, snapshot);
   const suites = inspectSuites(ev.suites, evidenceDir);
   const consistency = consistencyErrors(change, e);
   const traceErrors: string[] = [];
@@ -198,7 +234,21 @@ export function evaluate(
   }
   const realScns = new Map(reqs.flatMap((r) => r.scenarios.map((s) => [s, r] as const)));
   const allScns = new Set([...requirements.values()].flatMap((s) => [...s]));
-  const allTasks = new Set([...e.tasks.map((t) => t.id), ...tasks.keys()]);
+  const requiredTasks = new Set(e.tasks.map((t) => t.id));
+  const allTasks = new Set([...requiredTasks, ...tasks.keys()]);
+  for (const task of tasks.values()) {
+    if (!task.text.includes('[no-test]')) continue;
+    const approval = ev.exempt_tasks?.find((e) => e.task === task.id);
+    if (
+      requiredTasks.has(task.id) ||
+      !/\[no-test\]\s*[:—-]?\s*[^[\]\s].+/i.test(task.text) ||
+      !approval?.reason?.trim()
+    ) {
+      traceErrors.push(`Unverified no-test exception: ${task.id}`);
+    } else {
+      allTasks.delete(task.id);
+    }
+  }
   const coveredScns = new Set<string>(),
     coveredTasks = new Set<string>();
   const rows = [];
@@ -217,7 +267,7 @@ export function evaluate(
         throw new Error('Test missing or did not pass');
       checkAssertion(snapshot, link, infer);
       coveredScns.add(link.scenario);
-      coveredTasks.add(link.task);
+      if (allTasks.has(link.task)) coveredTasks.add(link.task);
       rows.push({
         req_id: req.id,
         scenario_id: link.scenario,
@@ -313,6 +363,13 @@ export function evaluate(
       errors,
       warnings: change.warnings,
     },
-    trace: { version: 1, final_commit: snapshot.commit, rows, errors: sorted(traceErrors) },
+    trace: {
+      aliases: infer ? (ev.aliases ?? []) : [],
+      artifact_links: infer ? (ev.artifact_links ?? []) : [],
+      version: 1,
+      final_commit: snapshot.commit,
+      rows,
+      errors: sorted(traceErrors),
+    },
   };
 }
