@@ -191,6 +191,7 @@ export function parsePlan(argv: string[]) {
     limits,
     timeout,
     go,
+    goRelay: go && (!dry || Boolean(fixture)),
     fixture,
     goSmoke: !!v['go-smoke'],
     calibration: !!v.calibration || experiment === 'E0' || experiment === 'E0-s',
