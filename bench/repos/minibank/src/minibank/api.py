@@ -7,6 +7,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from .cash_api import cash_router
+from .cash_desk import CashDesk
 from .models import DomainError, NewAccount, NewTransfer
 from .service import Ledger
 from .storage import Database
@@ -51,4 +53,5 @@ def create_app(
     def history(account_id: str) -> dict:
         return ledger.history(account_id)
 
+    app.include_router(cash_router(CashDesk(ledger.database, clock)))
     return app
