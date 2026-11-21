@@ -1,0 +1,32 @@
+{
+  "fixture": "synthetic-git-log",
+  "endpoint": "loopback",
+  "node": "v25.9.0",
+  "pluginSha256": "c377801b408513a863840129f1f1bbf8331b2d68cad4e11ca876ca9377abe7fd",
+  "checks": {
+    "1.19.6": {
+      "baseline": {
+        "chars": 902,
+        "sourceSha256": "d03316d3584db365900a9d3824fdf2191d83b7608a92bfb7b1c965d1a18fea93"
+      },
+      "compressed": {
+        "chars": 486,
+        "sourceSha256": "d03316d3584db365900a9d3824fdf2191d83b7608a92bfb7b1c965d1a18fea93",
+        "archiveSha256": "d03316d3584db365900a9d3824fdf2191d83b7608a92bfb7b1c965d1a18fea93",
+        "recovered": true
+      }
+    },
+    "2.3.2": {
+      "baseline": {
+        "chars": 902,
+        "sourceSha256": "d03316d3584db365900a9d3824fdf2191d83b7608a92bfb7b1c965d1a18fea93"
+      },
+      "compressed": {
+        "chars": 486,
+        "sourceSha256": "d03316d3584db365900a9d3824fdf2191d83b7608a92bfb7b1c965d1a18fea93",
+        "archiveSha256": "d03316d3584db365900a9d3824fdf2191d83b7608a92bfb7b1c965d1a18fea93",
+        "recovered": true
+      }
+    }
+  }
+}
