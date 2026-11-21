@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { collect, type Inputs, type Observation } from './meter/sources.js';
+import { collect, type Inputs, type Observation, sourceHashes } from './meter/sources.js';
 import {
   type Entry,
   equal,
@@ -265,9 +265,12 @@ function totals(calls: Calls) {
   };
 }
 
-export async function meterRun(runDir: string) {
+export async function meterRun(runDir: string, outputDir = runDir) {
   const manifest = record(JSON.parse(readFileSync(join(runDir, 'manifest.json'), 'utf8')));
+  const inputHashes = await sourceHashes(runDir);
   const data = await collect(runDir);
+  if (JSON.stringify(inputHashes) !== JSON.stringify(await sourceHashes(runDir)))
+    data.issues.add('raw inputs changed during import');
   const dry_run = manifest.dry_run === true;
   const calls = ledger(manifest, data);
   if (!data.hasEvents) data.issues.add('missing nonempty CLI event stream');
@@ -304,12 +307,14 @@ export async function meterRun(runDir: string) {
     cost: complete ? sums.cost : null,
     by_stage,
     coverage: data.hasProvider ? 'provider-ledger' : 'opencode-only',
+    raw_sha256: inputHashes,
     sha256: { 'calls.jsonl': hash(callText), 'stages.csv': hash(csv) },
   };
+  mkdirSync(outputDir, { recursive: true });
   const write = (file: string, content: string) => {
-    const tmp = join(runDir, `.${file}.${randomUUID()}.tmp`);
+    const tmp = join(outputDir, `.${file}.${randomUUID()}.tmp`);
     writeFileSync(tmp, content, { flag: 'wx' });
-    renameSync(tmp, join(runDir, file));
+    renameSync(tmp, join(outputDir, file));
   };
   write('calls.jsonl', callText);
   write('stages.csv', csv);
@@ -318,9 +323,14 @@ export async function meterRun(runDir: string) {
 }
 
 export async function meter(argv: string[]): Promise<number> {
-  if (argv.length !== 1 || argv[0]?.startsWith('-'))
-    throw new Error('Usage: frugal meter <run-dir>');
-  const result = await meterRun(argv[0]);
+  const [input, flag, destination] = argv;
+  if (
+    !input ||
+    input.startsWith('-') ||
+    (argv.length !== 1 && !(argv.length === 3 && flag === '--out' && destination))
+  )
+    throw new Error('Usage: frugal meter <run-dir> [--out <dir>]');
+  const result = await meterRun(input, destination);
   console.log(JSON.stringify(result));
   return result.complete ? 0 : 1;
 }

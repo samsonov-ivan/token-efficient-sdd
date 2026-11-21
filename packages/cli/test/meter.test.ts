@@ -161,6 +161,19 @@ describe('offline reconciliation', () => {
       issues: ['raw/events.jsonl#L2: invalid JSON'],
     });
   });
+  it('replays to a separate folder, fingerprints raw inputs and detects changed bytes', async () => {
+    const dir = fixture();
+    const output = join(dir, 'replay');
+    const first = await meterRun(dir, output);
+    expect(Object.keys(first.raw_sha256)).toEqual(['raw/events.jsonl', 'raw/exports/first.json']);
+    expect(first.raw_sha256['raw/events.jsonl']).toMatch(/^[0-9a-f]{64}$/);
+    expect(() => readFileSync(join(dir, 'meter.json'))).toThrow();
+    expect(JSON.parse(readFileSync(join(output, 'meter.json'), 'utf8'))).toEqual(first);
+    appendFileSync(join(dir, 'raw/events.jsonl'), '\n');
+    const next = await meterRun(dir, output);
+    expect(next.rpt).toBe(first.rpt);
+    expect(next.raw_sha256).not.toEqual(first.raw_sha256);
+  });
   it('reports divergent counters for a stable call ID without double counting', async () => {
     const dir = fixture(true);
     const changed = step('ses_root', 'first', { ...units, input: 91, total: 111 });
