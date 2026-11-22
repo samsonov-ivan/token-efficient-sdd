@@ -528,6 +528,9 @@ def test_h03_pilot_reports_only_metered_matched_finished_arms(tmp_path):
         assert "100 → 70" in text and "-30.00%" in text and "1 → 1" in text
         assert "автоматические гейты не закрыты, публичные 10/10" in text
         assert "независимая оценка отрицательная, публичные 8/10, закрытые 2/2" in text
+    contents = (out / "REPORT.md").read_text(encoding="utf-8")
+    assert "| Спецификация | 100 | 70 | 30.00 |" in contents
+    assert "Конкурсная оценка экономии пока открыта" in contents
     assert report.collect(root)[1] == {}
 
     base, opt = report.collect(root)[0]

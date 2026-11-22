@@ -889,6 +889,21 @@ def baseline_accounting(attempts):
     )
 
 
+def paired_stage_table(base, opt):
+    return table(
+        ["Стадия", "Base, RPT", "Opt, RPT", "Вклад в снижение, п. п."],
+        [
+            [
+                esc_md(STAGE_NAMES.get(stage, stage)),
+                base.stages[stage],
+                opt.stages[stage],
+                f"{100 * (base.stages[stage] - opt.stages[stage]) / base.rpt:.2f}",
+            ]
+            for stage in sorted(set(base.stages) | set(opt.stages))
+        ],
+    )
+
+
 def report_parts(attempts, pairs, out, prototype=()):
     valid = [(name, *arms) for name, (arms, _) in pairs.items() if arms]
     parts = [
@@ -917,12 +932,21 @@ def report_parts(attempts, pairs, out, prototype=()):
     )
     if pilots:
         parts.extend([f"## {PILOT_TITLE}", table(PILOT_COLUMNS, pilots)])
+        for pair, base, opt in pilot_pairs(attempts):
+            parts.extend(
+                [
+                    f"### Расход по стадиям · {esc_md(pair)}",
+                    paired_stage_table(base, opt),
+                ]
+            )
     accounting = baseline_accounting(attempts)
     if accounting:
         parts.extend(["## Учёт расхода на базовом конвейере", accounting])
     if not valid:
         parts.append(
-            "**Экономия токенов на полной фиче пока не подтверждена.** "
+            "**Конкурсная оценка экономии пока открыта.**"
+            if pilots
+            else "**Экономия токенов на полной фиче пока не подтверждена.** "
             "Для оценки нужны сопоставимые живые прогоны, прошедшие приёмку."
         )
     rows = []
@@ -989,18 +1013,7 @@ def report_parts(attempts, pairs, out, prototype=()):
         parts += [
             f"## Пара {name}",
             f"RPT {base.rpt} → {opt.rpt}. Экономия этой пары **{100 * (1 - ratio):.2f}%**.",
-            table(
-                ["Стадия", "Base", "Opt", "Вклад, п. п."],
-                [
-                    [
-                        esc_md(STAGE_NAMES.get(s, s)),
-                        base.stages[s],
-                        opt.stages[s],
-                        f"{100 * (base.stages[s] - opt.stages[s]) / base.rpt:.2f}",
-                    ]
-                    for s in sorted(set(base.stages) | set(opt.stages))
-                ],
-            ),
+            paired_stage_table(base, opt),
             table(
                 ["Компонента", "Base", "Opt"],
                 [[k, base.tokens[k], opt.tokens[k]] for k in TOKENS],
@@ -1204,6 +1217,8 @@ def write_dashboard(attempts, pairs, out, prototype=()):
         pilot_rows(attempts, e, lambda p, label: dashboard_link(out, p, label))
     )
     if pilots:
+        if not cards:
+            headline = "Конкурсная оценка экономии пока открыта"
         headings = "".join(
             f'<th scope="col">{e(label)}</th>' for label in PILOT_COLUMNS
         )
