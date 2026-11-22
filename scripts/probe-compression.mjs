@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { archivePath as logName, createHistory, fixtureDates, fixtureName } from './lib/h03-fixture.mjs';
 
 const run = promisify(execFile);
 const project = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -26,7 +27,6 @@ const plugin = join(project, 'packages/opencode-plugin');
 await access(join(plugin, 'dist/index.js'));
 const fixtureRoot = await mkdtemp(join(tmp, 'frugal-h03-'));
 const model = 'frugal-fixture/smoke';
-const logName = /^Full output \(project root\): (\.frugal\/logs\/([a-f0-9]{64})\.log)$/m;
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 function config(v1, baseURL) {
@@ -81,8 +81,7 @@ async function probe(binary, version, enabled) {
     CI: '1',
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_CONFIG_GLOBAL: '/dev/null',
-    GIT_AUTHOR_DATE: '2026-11-21T00:00:00Z',
-    GIT_COMMITTER_DATE: '2026-11-21T00:00:00Z',
+    ...fixtureDates,
     OPENCODE_DISABLE_MODELS_FETCH: '1',
     OPENCODE_DISABLE_DEFAULT_PLUGINS: '1',
     OPENCODE_DISABLE_AUTOUPDATE: '1',
@@ -111,19 +110,7 @@ async function probe(binary, version, enabled) {
     version,
   );
   const git = (...args) => run('git', args, opts).then(({ stdout }) => stdout);
-  await git('init', '-q', '--object-format=sha1');
-  for (let i = 0; i < 24; i++) {
-    await git(
-      '-c',
-      'user.email=fixture@example.test',
-      '-c',
-      'user.name=Fixture',
-      'commit',
-      '--allow-empty',
-      '-qm',
-      `Public fixture example no. ${i}`,
-    );
-  }
+  await createHistory(git);
   const original = await git('log', '--oneline');
   const digest = sha256(original);
   const log = join(cwd, '.frugal/logs', `${digest}.log`);
@@ -275,7 +262,7 @@ try {
     checks[version] = { baseline, compressed };
   }
   const report = {
-    fixture: 'synthetic-git-log',
+    fixture: fixtureName,
     endpoint: 'loopback',
     node: process.version,
     pluginSha256: sha256(await readFile(join(plugin, 'dist/index.js'))),
