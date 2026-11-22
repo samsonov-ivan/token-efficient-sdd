@@ -1,7 +1,9 @@
 // An independent public-feature pilot. frugal run and its admission rules are unchanged.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -243,6 +245,15 @@ function checkInventory() {
   );
 }
 try {
+  // Without an rg on its PATH, OpenCode tries to download one during skill loading.
+  // Stage only the executable in the read-only tools directory.
+  const rg = join(bin, 'rg');
+  const installedRg = execFileSync('/usr/bin/which', ['rg'], { encoding: 'utf8' }).trim();
+  copyFileSync(realpathSync(installedRg), rg);
+  run.ripgrep = {
+    version: (await checked(rg, ['--version'], offline, 'ripgrep-version')).split('\n')[0],
+    sha256: digest(readFileSync(rg)),
+  };
   await prepare(repo);
   git(repo, ['init', '-q']);
   git(repo, ['add', '-A']);
