@@ -77,3 +77,21 @@ node packages/cli/bin/frugal.js run --mode paired --feature add-transfer-limits 
 ```
 
 Локально можно повторить [весь нативный цикл H-01 с открытой фикстурой](../../docs/probes/LIVE-OPT.md) и [показ прототипа](../../docs/collaboration/DEFENSE-PREVIEW.md).
+
+## Пара H-03
+
+`--mode paired --flag tool_output_compression` запускает одинаковый сценарий B0 с одной настройкой сжатия в плече opt. Для конкурсного запуска требуется `--e0-cohorts`, как в команде выше. Для технического пилота из одной пары OpenCode Go задайте отдельные имена репетиции и запуска. Модель, вариант, образ, каталог QA и архив должны совпадать. Живая команда требует квитанцию Go smoke для того же SHA и профиля.
+
+```sh
+node packages/cli/bin/frugal.js run --mode paired --feature add-transfer-limits \
+  --model opencode-go/deepseek-v4.1-flash --variant max --out "$RUNS" \
+  --oracle-root "$QA_ROOT" --image "$IMAGE" --h03-pilot --flag tool_output_compression \
+  --dry-run --series h03-pilot-rehearsal
+
+node --env-file-if-exists=.env packages/cli/bin/frugal.js run --mode paired --feature add-transfer-limits \
+  --model opencode-go/deepseek-v4.1-flash --variant max --out "$RUNS" \
+  --oracle-root "$QA_ROOT" --image "$IMAGE" --h03-pilot --flag tool_output_compression \
+  --series h03-pilot-live
+```
+
+Финальные снимки проходят независимую приёмку по процедуре выше. В манифестах этой пары записывается `purpose: h03-pilot`. Отчёт показывает попытки с этой меткой вне зачёта.

@@ -150,6 +150,33 @@ def test_reject_tampering_mismatches_and_missing_raw(tmp_path):
     assert "отпечаток" in report.inspect_run(b).errors[0]
 
 
+def test_h03_pilot_preserves_meter_and_quality_outside_scoring(tmp_path):
+    root = tmp_path / "runs"
+    for branch, total in (("base", 100), ("opt", 70)):
+        arm = make_arm(root, branch, branch, total)
+        path = arm / "manifest.json"
+        manifest = report.read_json(path)
+        manifest.update(
+            purpose="h03-pilot",
+            mode="baseline" if branch == "base" else "optimized",
+            series_id="exploratory",
+        )
+        save(path, manifest)
+
+    attempts, pairs = report.collect(root)
+    assert len(attempts) == 2 and all(a.meter_ok and a.quality_ok for a in attempts)
+    assert not any(a.archived_baseline for a in attempts)
+    assert pairs == {}
+    assert report.summarize_series(attempts) == []
+    assert report.compare_arms(attempts)[0] is None
+    out = tmp_path / "output"
+    report.write_report(root, out)
+    for filename in ("REPORT.md", "dashboard.html"):
+        contents = (out / filename).read_text()
+        assert "пилот H-03 вне зачёта · модель" in contents
+        assert "30.00%" not in contents
+
+
 def test_missing_or_duplicate_arm_and_ties(tmp_path):
     make_arm(tmp_path, "first", "base", 80)
     assert report.collect(tmp_path)[1]["pair"][0] is None

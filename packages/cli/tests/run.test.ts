@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { Ajv } from 'ajv';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { git, readJson, writeJson } from '../src/harness/io.js';
 import { flagsFor, parsePlan } from '../src/harness/plan.js';
@@ -77,44 +78,113 @@ const budget = {
 };
 
 describe('isolated run lifecycle', () => {
-  it('rejects an uncalibrated live pair before starting either performer', async () => {
-    const { project, args, out } = fixture('{}', 'paired', 'python -m pytest -q');
-    const external = mkdtempSync(join(tmpdir(), 'frugal-public-admission-test-'));
-    const qa = join(external, 'example-change', 'hidden_tests');
-    mkdirSync(qa, { recursive: true });
-    writeFileSync(join(qa, 'open_control.txt'), 'Synthetic control for CLI admission tests only');
-    for (const script of ['live_eligibility.py', 'e0.py', 'report.py']) {
-      mkdirSync(join(project, 'analysis'), { recursive: true });
-      cpSync(resolve('analysis', script), join(project, 'analysis', script));
+  it.each(['session_per_task', 'tool_output_compression'])(
+    'rejects an uncalibrated live %s pair before starting either performer',
+    async (flag) => {
+      const { project, args, out } = fixture('{}', 'paired', 'python -m pytest -q');
+      const external = mkdtempSync(join(tmpdir(), 'frugal-public-admission-test-'));
+      const qa = join(external, 'example-change', 'hidden_tests');
+      mkdirSync(qa, { recursive: true });
+      writeFileSync(join(qa, 'open_control.txt'), 'Synthetic control for CLI admission tests only');
+      for (const script of ['live_eligibility.py', 'e0.py', 'report.py']) {
+        mkdirSync(join(project, 'analysis'), { recursive: true });
+        cpSync(resolve('analysis', script), join(project, 'analysis', script));
+      }
+      git(project, ['add', 'analysis', 'assets', 'bench/features', 'bench/repos']);
+      git(project, ['commit', '-m', 'Freeze public admission fixture'], identity);
+      const inspect = vi.spyOn(Container, 'imageID').mockResolvedValue(`sha256:${'1'.repeat(64)}`);
+      const launch = vi.spyOn(Container.prototype, 'exec').mockImplementation(() => {
+        throw new Error('Unexpected performer invocation');
+      });
+      try {
+        const common = [
+          ...args.filter((arg) => arg !== '--dry-run'),
+          '--model',
+          'public-test/unused',
+          '--flag',
+          flag,
+          '--oracle-root',
+          external,
+        ];
+        await expect(run(common)).rejects.toThrow(/--e0-cohorts/);
+        const declaration = join(external, 'declaration.json');
+        writeJson(declaration, { cohorts: {} });
+        await expect(run([...common, '--e0-cohorts', declaration])).rejects.toThrow(/M-M/);
+        expect(launch).not.toHaveBeenCalled();
+        expect(existsSync(out)).toBe(false);
+      } finally {
+        inspect.mockRestore();
+        launch.mockRestore();
+        rmSync(external, { recursive: true, force: true });
+      }
+    },
+  );
+  it('rehearses a named H-03 pilot through the same B0 workflow on both arms', async () => {
+    const { project, args, out } = fixture('{session_per_task: true, capsule: true}');
+    const plugin = join(project, 'packages/opencode-plugin/dist/index.js');
+    mkdirSync(dirname(plugin), { recursive: true });
+    writeFileSync(plugin, 'export default {};\n');
+    const common = [
+      ...args,
+      '--model',
+      'opencode-go/deepseek-v4.1-flash',
+      '--flag',
+      'tool_output_compression',
+    ];
+    const pilot = [...common, '--h03-pilot'];
+    for (const extra of [
+      ['--runs', '2'],
+      ['--mode', 'optimized'],
+      ['--flag', 'capsule'],
+      ['--flag', 'tool_output_compression'],
+      ['--e0-cohorts', 'example.json'],
+      ['--calibration'],
+    ]) {
+      expect(() => parsePlan([...pilot, ...extra])).toThrow();
     }
-    git(project, ['add', 'analysis', 'assets', 'bench/features', 'bench/repos']);
-    git(project, ['commit', '-m', 'Freeze public admission fixture'], identity);
-    const inspect = vi.spyOn(Container, 'imageID').mockResolvedValue(`sha256:${'1'.repeat(64)}`);
-    const launch = vi.spyOn(Container.prototype, 'exec').mockImplementation(() => {
-      throw new Error('Unexpected performer invocation');
+    const base = join(out, 'test-1-base-a1');
+    const opt = join(out, 'test-1-opt-a1');
+    onTestFinished(() => {
+      for (const arm of [base, opt]) {
+        const file = join(arm, 'manifest.json');
+        if (!existsSync(file)) continue;
+        const root = readJson<RunManifest>(file).isolation.root;
+        if (root) rmSync(root, { recursive: true, force: true });
+      }
+      rmSync(project, { recursive: true, force: true });
     });
-    try {
-      const common = [
-        ...args.filter((arg) => arg !== '--dry-run'),
-        '--model',
-        'public-test/unused',
-        '--flag',
-        'session_per_task',
-        '--oracle-root',
-        external,
-      ];
-      await expect(run(common)).rejects.toThrow(/--e0-cohorts/);
-      const declaration = join(external, 'declaration.json');
-      writeJson(declaration, { cohorts: {} });
-      await expect(run([...common, '--e0-cohorts', declaration])).rejects.toThrow(/M-M/);
-      expect(launch).not.toHaveBeenCalled();
-      expect(existsSync(out)).toBe(false);
-    } finally {
-      inspect.mockRestore();
-      launch.mockRestore();
-      rmSync(external, { recursive: true, force: true });
+    expect(await run(pilot)).toBe(0);
+    const validate = new Ajv({ strict: false }).compile(readJson('schemas/manifest.schema.json'));
+    const manifests = [base, opt].map((arm) => readJson<RunManifest>(join(arm, 'manifest.json')));
+    for (const [index, arm] of [base, opt].entries()) {
+      const manifest = manifests[index];
+      expect(manifest).toMatchObject({
+        purpose: 'h03-pilot',
+        experiment: null,
+        pipeline_complete: true,
+        accepted: false,
+        status: 'complete',
+        flags: { tool_output_compression: index === 1, session_per_task: false, capsule: false },
+      });
+      expect(manifest.stages.map((stage) => stage.stage)).toEqual([
+        'spec',
+        'apply',
+        'review',
+        'verify',
+      ]);
+      expect(existsSync(join(arm, 'b0/quality-review.json'))).toBe(true);
+      expect(validate(manifest)).toBe(true);
     }
-  });
+    expect(manifests[0].baseline_hash).toBe(manifests[1].baseline_hash);
+    expect(manifests[0].params).toEqual(manifests[1].params);
+    expect(validate({ ...manifests[1], flags: { ...manifests[1].flags, capsule: true } })).toBe(
+      false,
+    );
+    expect(validate({ ...manifests[1], experiment: 'E1' })).toBe(false);
+    await expect(run([...common, '--resume'])).rejects.toThrow('Frozen run inputs changed');
+    writeFileSync(plugin, 'export default { id: "changed" };\n');
+    await expect(run([...pilot, '--resume'])).rejects.toThrow('Frozen run inputs changed');
+  }, 60000);
   it('keeps rehearsal receipts distinct for baseline, optimized and paired runs on the same inputs', async () => {
     const { args, out } = fixture('{capsule: true}', 'baseline');
     for (const mode of ['baseline', 'optimized', 'paired']) {

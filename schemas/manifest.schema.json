@@ -42,6 +42,9 @@
       ],
       "minLength": 1
     },
+    "purpose": {
+      "enum": ["feature", "replay", "go-smoke", "h03-pilot"]
+    },
     "feature_id": {
       "type": "string",
       "minLength": 1
@@ -281,6 +284,38 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "required": ["purpose"],
+        "properties": { "purpose": { "const": "h03-pilot" } }
+      },
+      "then": {
+        "required": ["series_id", "experiment"],
+        "properties": {
+          "series_id": { "type": "string", "minLength": 1 },
+          "experiment": { "const": null },
+          "flags": { "required": ["tool_output_compression"] }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "branch": { "const": "base" },
+              "mode": { "const": "baseline" }
+            }
+          },
+          {
+            "properties": {
+              "branch": { "const": "opt" },
+              "mode": { "const": "optimized" },
+              "flags": {
+                "properties": { "tool_output_compression": { "const": true } },
+                "additionalProperties": { "const": false }
+              }
+            }
+          }
+        ]
+      }
+    },
     {
       "if": {
         "properties": {

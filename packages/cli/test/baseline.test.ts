@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -207,4 +208,23 @@ it('does not copy symlink targets from outside the checkout', async () => {
   const pointer = snapshot.find((e: { path: string }) => e.path === 'outside-link');
   expect(pointer.mode).toBe('120000');
   expect(await readFile(join(runDir, 'b0/blobs', pointer.sha256), 'utf8')).toBe(outside);
+});
+
+it('leaves H-03 full tool logs for the dedicated archive', async () => {
+  const { options, repo, runDir } = await fixture();
+  const logs = join(repo, '.frugal', 'logs');
+  const output = 'Raw tool output';
+  const hash = createHash('sha256').update(output).digest('hex');
+  await mkdir(logs, { recursive: true });
+  await writeFile(join(logs, `${hash}.log`), output);
+  await writeFile(join(repo, '.frugal', 'notes.md'), 'Snapshot evidence');
+  const { stages } = await executeBaseline({ ...options, omitToolLogsFromSnapshots: true });
+  const snapshot = JSON.parse(
+    await readFile(join(runDir, 'b0', 'snapshots', `${stages[0].input.content}.json`), 'utf8'),
+  );
+  expect(snapshot).toContainEqual(expect.objectContaining({ path: '.frugal/notes.md' }));
+  expect(snapshot).not.toContainEqual(
+    expect.objectContaining({ path: `.frugal/logs/${hash}.log` }),
+  );
+  await expect(readFile(join(runDir, 'b0', 'blobs', hash), 'utf8')).rejects.toThrow(/ENOENT/);
 });

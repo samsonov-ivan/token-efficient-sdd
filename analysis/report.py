@@ -98,11 +98,18 @@ class Attempt:
         )
 
     @property
+    def exploratory(self):
+        return self.manifest.get("purpose") == "h03-pilot"
+
+    @property
+    def score_eligible(self):
+        return self.live and not self.technical and not self.exploratory
+
+    @property
     def archived_baseline(self):
         m = self.manifest
         return (
-            self.live
-            and not self.technical
+            self.score_eligible
             and m.get("mode") == "baseline"
             and m.get("status") in {"complete", "failed", "interrupted"}
         )
@@ -283,6 +290,8 @@ def inspect_run(path):
 
 
 def compare_arms(arms):
+    if any(a.exploratory for a in arms):
+        return None, "технический пилот H-03 вне конкурсного сравнения"
     if sorted(a.manifest.get("branch", "") for a in arms) != ["base", "opt"]:
         return None, "нужно по одному плечу base и opt"
     base, opt = sorted(arms, key=lambda a: a.manifest["branch"])
@@ -311,7 +320,7 @@ def collect(root):
             attempts.append(inspect_run(path.parent))
     pairs = defaultdict(list)
     for a in attempts:
-        if a.live and not a.technical and a.manifest.get("pair_id"):
+        if a.score_eligible and a.manifest.get("pair_id"):
             pairs[a.manifest["pair_id"]].append(a)
     return attempts, {key: compare_arms(arms) for key, arms in sorted(pairs.items())}
 
@@ -343,6 +352,8 @@ def sign_p(ratios):
 
 
 def kind_of(a):
+    if a.exploratory:
+        return "пилот H-03 вне зачёта · " + ("модель" if a.live else "mock")
     if a.manifest.get("purpose") == "go-smoke":
         return "проверка OpenCode Go · " + ("модель" if a.live else "mock")
     if a.manifest.get("kind") == "meter-smoke":
@@ -389,7 +400,7 @@ def summarize_series(attempts):
     series = defaultdict(list)
     for a in attempts:
         m = a.manifest
-        if a.live and not a.technical and m.get("series_id"):
+        if a.score_eligible and m.get("series_id"):
             series[m["series_id"]].append(a)
     result = []
     for name, members in sorted(series.items()):

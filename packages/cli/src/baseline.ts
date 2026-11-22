@@ -40,6 +40,7 @@ export interface BaselineOptions {
   requirement: string;
   model: string;
   invoke: (request: BaselineRequest) => Promise<CommandResult>;
+  omitToolLogsFromSnapshots?: boolean;
   /** Canonical Git tree using the same staging policy as the evaluator, in the sandbox. */
   snapshot?: () => Promise<string>;
 }
@@ -127,6 +128,11 @@ async function capture(
 ): Promise<Snapshot> {
   const entries = [];
   for (const path of await filesIn(opts.repo, true)) {
+    if (
+      opts.omitToolLogsFromSnapshots &&
+      (path === '.frugal/logs' || path.startsWith('.frugal/logs/'))
+    )
+      continue;
     const full = join(opts.repo, path);
     const stat = await lstat(full);
     const symlink = stat.isSymbolicLink();

@@ -7,6 +7,7 @@ import { type GoVariant, isGoVariant } from './go.js';
 import { digest, git, hashTree, readJson, slug } from './io.js';
 export type Mode = 'baseline' | 'optimized' | 'ablation';
 export type Flag = boolean | number | 'auto';
+export const TOOL_OUTPUT_COMPRESSION = 'tool_output_compression';
 type Budget = {
   runs: number;
   mode: string;
@@ -43,6 +44,7 @@ export function parsePlan(argv: string[]) {
       calibration: { type: 'boolean' },
       timeout: { type: 'string' },
       'go-smoke': { type: 'boolean' },
+      'h03-pilot': { type: 'boolean' },
       'usage-relay': { type: 'boolean' },
       'relay-fixture': { type: 'string' },
     },
@@ -193,6 +195,14 @@ export function parsePlan(argv: string[]) {
   if (!dry && !v['go-smoke'] && oracleHash === 'unavailable')
     throw new Error('Missing frozen hidden oracle');
   const flags = (v.flag ?? []).map((f) => slug(f, 'optimization flag')).sort();
+  const h03Pair = mode === 'paired' && flags.length === 1 && flags[0] === TOOL_OUTPUT_COMPRESSION;
+  const h03Pilot = !!v['h03-pilot'];
+  const calibration = !!v.calibration || experiment === 'E0' || experiment === 'E0-s';
+  if (h03Pair && calibration) throw new Error('H-03 pairs cannot be used for baseline calibration');
+  if (h03Pilot && (!h03Pair || runs !== 1 || !v.series || experiment || v['e0-cohorts'] || !go))
+    throw new Error(
+      '--h03-pilot requires one named OpenCode Go pair with only --flag tool_output_compression and no experiment or calibration evidence',
+    );
   if (mode === 'ablation' && !flags.length) throw new Error('--mode ablation requires --flag');
   if (mode === 'baseline' && flags.length) throw new Error('B0 requires all flags off');
   const slotModes: Mode[] = mode === 'paired' ? ['baseline', 'optimized'] : [mode as Mode];
@@ -216,7 +226,9 @@ export function parsePlan(argv: string[]) {
     goRelay: go && (!dry || Boolean(fixture)),
     fixture,
     goSmoke: !!v['go-smoke'],
-    calibration: !!v.calibration || experiment === 'E0' || experiment === 'E0-s',
+    h03Pair,
+    h03Pilot,
+    calibration,
     budget,
     mode,
     dry,
@@ -246,9 +258,10 @@ export type Plan = ReturnType<typeof parsePlan>;
 export type Slot = Plan['slots'][number];
 export function flagsFor(mode: Mode, defaults: Record<string, Flag>, selected: string[]) {
   const effective = { ...defaults };
-  // The frozen target can predate the controller's task-session flags.
+  // The frozen target can predate flags supplied explicitly by the controller.
   for (const flag of selected) {
-    if (flag === 'session_per_task' || flag === 'capsule') effective[flag] ??= false;
+    if (flag === 'session_per_task' || flag === 'capsule' || flag === TOOL_OUTPUT_COMPRESSION)
+      effective[flag] ??= false;
     if (!Object.hasOwn(effective, flag))
       throw new Error(`Unknown optimization flag in target config: ${flag}`);
   }
@@ -264,4 +277,14 @@ export function flagsFor(mode: Mode, defaults: Record<string, Flag>, selected: s
             : effective[k],
       ]),
   );
+}
+
+export function workflowMode(mode: Mode, flags: Record<string, Flag>): Mode {
+  // Compression-only runs use the B0 stage and review evidence layout.
+  const compressionOnly =
+    flags[TOOL_OUTPUT_COMPRESSION] === true &&
+    Object.entries(flags).every(
+      ([name, value]) => name === TOOL_OUTPUT_COMPRESSION || value === false,
+    );
+  return compressionOnly ? 'baseline' : mode;
 }

@@ -24,7 +24,8 @@ const moduleUsage: Partial<Record<Command, string>> = {
   report: '<runs-dir> [options]',
   run:
     '(--experiment <id> [--budget-plan <slug>] | --mode <mode> --feature <id> --model <id>) ' +
-    '[--variant <name>] [--runs N] [--flag <name>] [--e0-cohorts <file>] [--dry-run]',
+    '[--variant <name>] [--runs N] [--flag <name>] [--e0-cohorts <file>] [--dry-run] ' +
+    '[--h03-pilot --series <id> --flag tool_output_compression]',
   trace: `${qualityUsage} --evidence FILE`,
 };
 

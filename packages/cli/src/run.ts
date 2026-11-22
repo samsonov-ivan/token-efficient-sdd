@@ -36,7 +36,7 @@ import {
 import { executeOptimizedReplay, usesOptimizedReplay } from './harness/optimized-replay.js';
 import { executeLiveOptimized, validateLiveOptFlags } from './harness/live-opt.js';
 import { createTaskGate, publicTaskConfig } from './harness/task-gate.js';
-import { flagsFor, parsePlan } from './harness/plan.js';
+import { TOOL_OUTPUT_COMPRESSION, flagsFor, parsePlan, workflowMode } from './harness/plan.js';
 import type { Flag, Plan, Slot } from './harness/plan.js';
 import {
   invocationStem,
@@ -137,7 +137,13 @@ function initial(
     pair_id: slot.pair,
     series_id: plan.id,
     experiment: plan.experiment,
-    purpose: plan.goSmoke ? 'go-smoke' : plan.dry ? 'replay' : 'feature',
+    purpose: plan.h03Pilot
+      ? 'h03-pilot'
+      : plan.goSmoke
+        ? 'go-smoke'
+        : plan.dry
+          ? 'replay'
+          : 'feature',
     feature_id: plan.feature,
     change_id: plan.feature,
     dry_run: plan.dry,
@@ -221,7 +227,13 @@ function bindInputs(file: string, signature: string) {
   )
     throw new Error(`Frozen run inputs changed: ${file}`);
 }
-function provenance(plan: Plan, baselineHash: string, configHash: string, image: string | null) {
+function provenance(
+  plan: Plan,
+  baselineHash: string,
+  configHash: string,
+  image: string | null,
+  pluginHash: string | null,
+) {
   return digest(
     JSON.stringify([
       plan.feature,
@@ -239,6 +251,8 @@ function provenance(plan: Plan, baselineHash: string, configHash: string, image:
       baselineHash,
       configHash,
       image,
+      ...(pluginHash ? [pluginHash] : []),
+      ...(plan.h03Pilot ? ['h03-pilot'] : []),
     ]),
   );
 }
@@ -303,16 +317,27 @@ function stageWriter(m: Manifest, runDir: string, request: Invocation, start: st
   };
 }
 
-async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, root: string) {
+async function execute(
+  plan: Plan,
+  runDir: string,
+  m: Manifest,
+  repo: string,
+  root: string,
+  pluginHash: string | null,
+) {
   const env = runnerEnvironment(root);
-  const compressTools = m.mode !== 'baseline' && m.flags.tool_output_compression === true;
+  const compressTools = m.mode !== 'baseline' && m.flags[TOOL_OUTPUT_COMPRESSION] === true;
+  const workflow = workflowMode(m.mode, m.flags);
   if (compressTools) env.FRUGAL_TOOL_OUTPUT_COMPRESSION = '1';
   const installPlugin = (name: string) => {
     const plugin = join(plan.project, 'packages/opencode-plugin/dist/index.js');
     const plugins = join(env.OPENCODE_CONFIG_DIR, 'plugins');
     mkdirSync(plugins, { recursive: true });
-    copyFileSync(plugin, join(plugins, name));
-    m.metering.plugin_sha256 = hashTree(plugin);
+    const installed = join(plugins, name);
+    copyFileSync(plugin, installed);
+    m.metering.plugin_sha256 = hashTree(installed);
+    if (pluginHash && m.metering.plugin_sha256 !== pluginHash)
+      throw new Error('Frozen H-03 plugin changed');
   };
   let relay: Awaited<ReturnType<typeof startUsageRelay>> | undefined;
   const closeRelay = async () => {
@@ -540,8 +565,9 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       model: m.model,
       invoke,
       snapshot,
+      omitToolLogsFromSnapshots: compressTools,
     };
-    if (!plan.dry && m.mode !== 'baseline') {
+    if (!plan.dry && workflow !== 'baseline') {
       if (!c) throw new Error('Live optimized tasks require an isolated performer');
       const config = publicTaskConfig(parse(git(repo, ['show', `${plan.pin}:frugal.yaml`])));
       await executeLiveOptimized({
@@ -552,7 +578,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
           `Add a substantive public pytest using @pytest.mark.task("${id}") and the applicable scenario marker. The controller runs the marked tests before advancing.`,
         checkTask: createTaskGate(root, repo, runDir, config, plan.timeout, (argv) => c.exec(argv)),
       });
-    } else if (plan.dry && m.mode !== 'baseline' && usesOptimizedReplay(m.flags)) {
+    } else if (plan.dry && workflow !== 'baseline' && usesOptimizedReplay(m.flags)) {
       await executeOptimizedReplay({
         repo,
         runDir,
@@ -617,7 +643,7 @@ async function execute(plan: Plan, runDir: string, m: Manifest, repo: string, ro
       if (!c) throw new Error('Missing isolation for evaluation');
       if (!compressTools) await c.stop();
       await closeStorage(c, root, runDir);
-      const quality = await evaluate(plan, runDir, m.final_commit, c.image, m.mode);
+      const quality = await evaluate(plan, runDir, m.final_commit, c.image, workflow);
       m.gates = quality.gates;
       m.hidden = quality.hidden;
       if (quality.code !== 0)
@@ -683,9 +709,11 @@ export async function run(argv: string[]): Promise<number> {
   const config = parse(configText);
   const configHash = digest(configText);
   let admission: string | null = null;
-  if (!plan.dry && plan.mode !== 'baseline') {
-    validateLiveOptFlags(flagsFor('optimized', config.flags ?? {}, plan.flags));
-    publicTaskConfig(config);
+  if (!plan.dry && plan.mode !== 'baseline' && !plan.h03Pilot) {
+    if (!plan.h03Pair) {
+      validateLiveOptFlags(flagsFor('optimized', config.flags ?? {}, plan.flags));
+      publicTaskConfig(config);
+    }
     if (!plan.cohorts)
       throw new Error('Live optimized execution requires verified F0/E0 archives via --e0-cohorts');
     const proof = await checked(
@@ -704,10 +732,19 @@ export async function run(argv: string[]): Promise<number> {
       throw new Error('F0/E0 admission did not confirm this baseline');
     admission = JSON.stringify(verified);
   }
-  const shared = provenance(plan, assetsHash, configHash, image);
+  const pluginHash = plan.h03Pair
+    ? hashTree(join(plan.project, 'packages/opencode-plugin/dist/index.js'))
+    : null;
+  const shared = provenance(plan, assetsHash, configHash, image, pluginHash);
   // Historical B0 receipts keep their filename. Each optimized protocol must
   // rehearse the same arms, even when its effective flags equal another mode's.
-  const inputsKey = provenance(plan, assetsHash, configHash, null);
+  const inputsKey = provenance(
+    plan,
+    assetsHash,
+    configHash,
+    plan.h03Pilot ? image : null,
+    pluginHash,
+  );
   const receiptKey = plan.mode === 'baseline' ? inputsKey : `${inputsKey}-${plan.mode}`;
   const receipt = join(plan.out, '.dry-runs', `${receiptKey}.json`);
   if (!plan.dry && !existsSync(receipt))
@@ -793,7 +830,7 @@ export async function run(argv: string[]): Promise<number> {
             .some((p) => p.split('/').includes('hidden_tests'))
         )
           throw new Error('Invalid clean performer clone');
-        await execute(plan, dir, m, repo, root);
+        await execute(plan, dir, m, repo, root, pluginHash);
       } catch (error) {
         m.status = 'failed';
         m.finished_at = now();
@@ -881,7 +918,7 @@ async function evaluateOnly(argv: string[]): Promise<number> {
       dir,
       m.final_commit,
       m.isolation.image,
-      m.mode,
+      workflowMode(m.mode, m.flags),
     );
   }
   const receipt = readJson<Record<string, string>>(join(input, 'inputs.json'));
