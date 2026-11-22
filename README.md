@@ -11,7 +11,7 @@
 Склонируйте ветку с прототипом. Если она уже открыта локально, выполняйте команды с `npm ci` из корня проекта.
 
 ```bash
-git clone --branch codex/frugal-integration https://github.com/samsonov-ivan/token-efficient-sdd.git frugal
+git clone --depth 1 --branch codex/frugal-integration https://github.com/samsonov-ivan/token-efficient-sdd.git frugal
 cd frugal
 npm ci
 npm run build
