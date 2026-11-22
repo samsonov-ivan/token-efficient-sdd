@@ -294,7 +294,11 @@
         "properties": {
           "series_id": { "type": "string", "minLength": 1 },
           "experiment": { "const": null },
-          "flags": { "required": ["tool_output_compression"] }
+          "flags": {
+            "type": "object",
+            "properties": { "tool_output_compression": { "type": "boolean" } },
+            "required": ["tool_output_compression"]
+          }
         },
         "oneOf": [
           {
@@ -308,6 +312,7 @@
               "branch": { "const": "opt" },
               "mode": { "const": "optimized" },
               "flags": {
+                "type": "object",
                 "properties": { "tool_output_compression": { "const": true } },
                 "additionalProperties": { "const": false }
               }

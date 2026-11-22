@@ -154,7 +154,9 @@ describe('isolated run lifecycle', () => {
       rmSync(project, { recursive: true, force: true });
     });
     expect(await run(pilot)).toBe(0);
-    const validate = new Ajv({ strict: false }).compile(readJson('schemas/manifest.schema.json'));
+    const validate = new Ajv({ strict: true, allowUnionTypes: true }).compile(
+      readJson('schemas/manifest.schema.json'),
+    );
     const manifests = [base, opt].map((arm) => readJson<RunManifest>(join(arm, 'manifest.json')));
     for (const [index, arm] of [base, opt].entries()) {
       const manifest = manifests[index];
