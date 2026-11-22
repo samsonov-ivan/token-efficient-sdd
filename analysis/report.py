@@ -781,6 +781,31 @@ def h03_live_results(summary):
 def prototype_results(root):
     summary = root / "summary"
     results = h03_live_results(summary)
+    path = summary / "h03-csv2-pilot-1-comparison.json"
+    if path.is_file():
+        evidence = read_json(path)
+        base, opt = evidence["baseline"], evidence["optimized"]
+        base_rpt, known_opt_rpt = base["rpt"], opt["known_rpt"]
+        if (
+            evidence.get("purpose") == "h03-pilot"
+            and evidence.get("eligible_for_scored_pair") is False
+            and base.get("accepted") is True
+            and base.get("metering_complete") is True
+            and opt.get("metering_complete") is False
+            and opt.get("rpt") is None
+            and type(base_rpt) is int
+            and type(known_opt_rpt) is int
+            and 0 < base_rpt <= known_opt_rpt
+        ):
+            results.append(
+                (
+                    "CSV-пилот H-03 · частичный учёт opt",
+                    f"Base принят, {base_rpt} RPT. Opt остановился на verify. "
+                    f"Подтверждено как минимум {known_opt_rpt} RPT "
+                    f"(+{known_opt_rpt / base_rpt - 1:.2%} относительно base).",
+                    path,
+                )
+            )
     path = summary / "h03-native-loopback.json"
     if path.is_file():
         evidence = read_json(path)

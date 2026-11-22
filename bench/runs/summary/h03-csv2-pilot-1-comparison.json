@@ -1,0 +1,91 @@
+{
+  "pair_id": "h03-csv2-pilot-1",
+  "purpose": "h03-pilot",
+  "eligible_for_scored_pair": false,
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "requested_variant": "max",
+  "input_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "runner_commit": "fffcd52447ae1d8a841421180bdb3437f4113fe0",
+  "requirements_sha256": "4e5c8e7755f265ce0ff81dc0f9099a95c97fd402bfe8c946f9d40fa042293f23",
+  "oracle_sha256": "2fa8e442c678d8c3b0bb8ee8555ebf6b9d93882ea807bfc08dccb376d4a815d3",
+  "docker_image": "sha256:8d40a7050991b0ecb3ff6d7e8fc7155e307817c070d6eb33b203a03095ca447e",
+  "plugin_sha256": "c377801b408513a863840129f1f1bbf8331b2d68cad4e11ca876ca9377abe7fd",
+  "baseline": {
+    "run_id": "h03-csv2-pilot-1-base-a1",
+    "status": "complete",
+    "pipeline_complete": true,
+    "accepted": true,
+    "final_commit": "f9f13f0110b49c958ee86750ba83aae55819ba39",
+    "metering_complete": true,
+    "calls_with_evidence": 94,
+    "rpt": 3848958,
+    "known_rpt": 3848958,
+    "known_rpt_by_stage": {
+      "apply": 2109328,
+      "review": 512901,
+      "spec": 840991,
+      "verify": 385738
+    },
+    "balance_charge": 0,
+    "evidence_sha256": {
+      "manifest.json": "7ad04415b4f05a2790da04307695e5df960d23f05927833b8af3d1bb43cab0d6",
+      "meter.json": "300dc302b9798069eb4359b14030cb89daf85ebddbbc59fcdff95ec15f1cb658",
+      "calls.jsonl": "d22f427896b466d191068d42c4266a9cff94de2776aebc3b960a4083d2f1fd1e"
+    }
+  },
+  "optimized": {
+    "run_id": "h03-csv2-pilot-1-opt-a1",
+    "status": "failed",
+    "pipeline_complete": false,
+    "accepted": false,
+    "final_commit": null,
+    "metering_complete": false,
+    "calls_with_evidence": 88,
+    "rpt": null,
+    "known_rpt": 3901032,
+    "known_rpt_by_stage": {
+      "apply": 1139878,
+      "review": 1986261,
+      "spec": 640152,
+      "verify": 134741
+    },
+    "balance_charge": null,
+    "evidence_sha256": {
+      "manifest.json": "4ce7263f47218d65ceb1da5cce0ef033e35faf52c2d6f4f5dbf1ead6ed0bc5ae",
+      "meter.json": "af5367c1ab3c036e10d53b1dd5dee155b5f679933783c4cb23b2a17a896c82ee",
+      "calls.jsonl": "326f4878d3aa358ecfa6d516d0a38c4671e6d4503016a7910513fe990e17414c"
+    }
+  },
+  "opt_reviewed_tree": "a252637409bedd822e868b81caa7a01409ccf1dc",
+  "opt_retained_log_count": 3,
+  "opt_stopped_stage": "verify",
+  "opt_relay_issues": [
+    "Go subscription billing unverified",
+    "missing or different upstream model",
+    "missing upstream request ID",
+    "missing upstream usage",
+    "upstream transport failed"
+  ],
+  "minimum_extra_rpt": 52074,
+  "offline_reviewed_tree_diagnostics": {
+    "scope": "reviewed Git tree only",
+    "public_pytest_passed": 101,
+    "supplemental_public_checks_passed": 19,
+    "public_pytest_output_sha256": "6755837ae99e75e4f81715dfd90b0f4419f56c92f9b69232d9d0828ccae80385",
+    "supplemental_output_sha256": "09dba9de9207d973ba8d706240b67c91b61d170615d58287e062d2a6f4a91648",
+    "prior_fractional_timestamp_fixture": {
+      "base": {
+        "stored": "2026-01-02T23:59:59.123456Z",
+        "exported": "2026-01-02T23:59:59.123456Z",
+        "same_utc_instant": true,
+        "output_sha256": "25de88c0e6f8b4d3b0e4e91492462b4ac73339a0344338ab99955131a4bfd6f2"
+      },
+      "opt": {
+        "stored": "2026-01-02T23:59:59.123456Z",
+        "exported": "2026-01-02T23:59:59Z",
+        "same_utc_instant": false,
+        "output_sha256": "e58ac3689df26b3cd9b0f5a57896ad629485618527c7ac2e1b3e3864d447a00d"
+      }
+    }
+  }
+}
