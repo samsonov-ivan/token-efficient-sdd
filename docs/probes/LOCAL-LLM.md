@@ -1,0 +1,87 @@
+# Пилоты H-01 на локальной модели
+
+На открытом JavaScript-проекте проверили, что происходит со входом OpenCode при переходе в отдельную сессию задачи. Потребление во всех завершённых ответах Qwen2.5 удалось пересчитать по исходному потоку сервера. Модель не реализовала требуемые методы очереди. Экономию на принятой фиче эти данные оценить не позволяют. Для конкурсной серии остаются открыты Ф0 и независимая приёмка. [Протокол и критерии допуска](../EXPERIMENTS.md#local-h01-20261122--пилот-с-локальной-моделью-на-стадии-apply)
+
+## Qwen2.5 · две задачи и передача контекста
+
+Входом служила MIT-реализация `yocto-queue` на снимке `72a8fa96a9d389765cdf2bb9c6daba8302fc375d`. Задача 1 добавляет условное снятие головы через `dequeueIf`. Задача 2 реализует `drainWhile` через результат первой. Обе стороны получают одинаковую инструкцию передачи. В режиме `shared` следующая задача продолжает сессию, в `fresh` получает новую. Порядок строк соответствует порядку исполнения внутри пары. RPT — сумма входных и выходных токенов. [Исходник и проверка поведения](../../scripts/fixtures/local-context-pilot/fixture.mjs) · [Оригинал проекта](https://github.com/sindresorhus/yocto-queue/tree/72a8fa96a9d389765cdf2bb9c6daba8302fc375d)
+
+| Пара | Сессия | RPT задачи 1 | RPT задачи 2 | RPT всего | Исходные проверки | Новые проверки |
+|---|---|---:|---:|---:|---:|---:|
+| A | shared | 3474 | 3777 | 7251 | 2/2 | 0/8 |
+| A | fresh | 3474 | 3502 | 6976 | 2/2 | 0/8 |
+| B | fresh | 3472 | 3500 | 6972 | 2/2 | 0/8 |
+| B | shared | 3472 | 3774 | 7246 | 2/2 | 0/8 |
+
+Все восемь запросов дали завершённые ответы. В каждом модель вывела описание команды чтения текстом. OpenCode не получил структурированного вызова инструмента, и код очереди остался исходным. Независимый аудитор сверяет usage сервера с каждым событием `step_finish`, хешами запросов и идентификаторами сессий. [Запросы, ответы, тесты и манифесты пар](local-h01-qwen25.zip)
+
+В полном запросе задачи 2 нашлись два сообщения из задачи 1, всего 1159 байт в представлении JSON. Если удалить ровно эти сообщения и сохранить остальные поля, байты запроса совпадут с фактически отправленным запросом свежей сессии. Повторное применение шаблона модели и токенизация дали 3708 → 3433 в A и 3706 → 3432 в B. Это объясняет разницу в размере конкретного входа. [Сводка с хешами](../../bench/runs/summary/local-h01-qwen-history/summary.json) · [Код пересчёта](../../scripts/attribute-pilot-history.mjs)
+
+## Qwen2.5 · запуск полного конвейера
+
+По отдельному брифу запустили штатные B0 и H-01. Оба завершились на первой стадии. После ответа модели отсутствовал обязательный `openspec/changes/queue-conditional-drain/proposal.md`. Реализация, ревью и финальная проверка модели не начались. На итоговом дереве независимый проверяющий процесс получил 2/2 исходных и 0/8 новых проверок в каждом плече. Полный цикл остаётся неподтверждённым. [Манифесты, события стадий, тесты и снимки](local-sdd-qwen25.zip)
+
+| Плечо | Последняя стадия | Вход | Выход | Наблюдаемый RPT |
+|---|---|---:|---:|---:|
+| baseline | spec-0 | 10297 | 19 | 10316 |
+| optimized | spec-0 | 10287 | 19 | 10306 |
+
+## Офлайн-проверка с чистого клона
+
+Из корня репозитория на macOS под Bash или zsh. Для пересчёта нужны Node ≥22.20 и Python ≥3.11. Архивы разложены в разные каталоги, у каждого свой `SHA256SUMS`.
+
+```sh
+proof_dir=$(mktemp -d)
+for archive in local-h01-qwen25 local-sdd-qwen25; do
+  unzip -q "docs/probes/$archive.zip" -d "$proof_dir/$archive" || exit 1
+  (cd "$proof_dir/$archive" && shasum -a 256 --check --quiet SHA256SUMS) || exit 1
+done
+apply_root="$proof_dir/local-h01-qwen25"
+python3 analysis/local_context_audit.py "$apply_root"/local-h01-qwen-20261122-{a,b}
+node scripts/attribute-pilot-history.mjs --verify bench/runs/summary/local-h01-qwen-history \
+  "$apply_root"/local-h01-qwen-20261122-{a,b}
+python3 analysis/local_context_audit.py "$proof_dir/local-sdd-qwen25"/local-sdd-qwen25-20261122-{baseline,optimized}
+```
+
+| ZIP | SHA-256 файла |
+|---|---|
+| `local-h01-qwen25.zip` | `123c217b992ee40208752b8ee945e2b274d9203825fb28b27985dd830f7693e4` |
+| `local-sdd-qwen25.zip` | `3ca8e27f29e9db5f11e6dc828ad9a9912d73c99bfad8f14115925b93a70deeb8` |
+
+## Повтор с локальным инференсом на macOS
+
+Использовали Apple M5 с 16 ГиБ, OpenCode V1 1.19.6, OpenSpec 2.1.1 и llama.cpp build 12359 (`b1b770d90d94cad9e9ea5b993bdbc383a522fb28`). Вызовы выполняются на loopback, дополнительные API-списания — $0. Скачайте `qwen2.5-coder-7b-instruct-q4_k_m.gguf` как `weights.gguf` и исходный `tokenizer_config.json` из указанных ревизий. [Веса Qwen](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/tree/13fb94bfda8c8cf22497dc57b78f391a9acb426a) · [Шаблон из tokenizer_config.json](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct/blob/c03e6d358207e414f1eca0bb1891e29f1db0e242/tokenizer_config.json) · [Версия сервера](https://github.com/ggml-org/llama.cpp/tree/b1b770d90d94cad9e9ea5b993bdbc383a522fb28)
+
+```sh
+python3 -c 'import json,pathlib; pathlib.Path("chat.jinja").write_bytes(json.loads(pathlib.Path("tokenizer_config.json").read_bytes())["chat_template"].encode())'
+shasum -a 256 --check <<'SUMS'
+509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c  weights.gguf
+cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f  chat.jinja
+SUMS
+llama-server --offline --model ./weights.gguf --alias qwen2.5-coder-7b-instruct-q4-k-m \
+  --host 127.0.0.1 --port 18081 --ctx-size 24576 --parallel 1 --temp 0 --seed 42 \
+  --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on --cache-ram 0 \
+  --no-ui --jinja --chat-template-file ./chat.jinja --log-timestamps
+```
+
+В другом терминале, из корня проекта, создайте отдельную копию контроллера. Каждая попытка получает новый каталог. Процесс пилота может завершиться с кодом 1 при провале проверок, причина и известный расход сохраняются в `run.json`. Код 0 в офлайн-аудите подтверждает полноту учёта. Результат проверки поведения указан отдельно в `public_checks_passed`.
+
+```sh
+repeat_dir=$(mktemp -d)
+git clone -q --no-local . "$repeat_dir/controller" && cd "$repeat_dir/controller"
+git switch --detach 73e1758ac5e23907a064e5a3ca4e949af8fc8e9c
+npm ci && npm run build
+model_id=qwen2.5-coder-7b-instruct-q4-k-m
+for order in shared,fresh fresh,shared; do
+  node scripts/pilot-task-context.mjs --fixture scripts/fixtures/local-context-pilot \
+    --endpoint http://127.0.0.1:18081/v1 --model "$model_id" --arms "$order" \
+    --context 24576 --max-output 2048 --steps 8 --timeout-ms 420000 --out "$repeat_dir/$order"
+done
+git switch --detach 1d9d86e5973fa9106b46e7bd3606b319bd38be1b
+npm run build
+for arm in baseline optimized; do
+  node scripts/pilot-full-sdd.mjs --arm "$arm" --endpoint http://127.0.0.1:18081/v1 \
+    --model "$model_id" --context 24576 --max-output 2048 --steps 10 \
+    --timeout-ms 1500000 --out "$repeat_dir/full-$arm"
+done
+```

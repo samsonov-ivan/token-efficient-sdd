@@ -114,10 +114,47 @@ def audit_task(folder):
     }
 
 
+def audit_full_run(root, run):
+    """Cross-check the recorded native stage inventory and token totals."""
+    native = root / "native"
+    labels = [stage["label"] for stage in run["stages"]]
+    found = sorted(p.name for p in native.iterdir() if p.is_dir())
+    if not labels or sorted(labels) != found:
+        raise ValueError("recorded stage inventory differs from native directories")
+    stages = {}
+    for label, recorded in zip(labels, run["stages"], strict=True):
+        directory = native / label
+        if read(directory / "result.json") != recorded:
+            raise ValueError(f"{label}: stage result differs from run summary")
+        audit = audit_task(directory)
+        if recorded["requests"] != audit["http_attempts"]:
+            raise ValueError(f"{label}: wrong HTTP attempt count")
+        if not audit["issues"] and recorded["provider_rpt"] != audit["known_total"]:
+            raise ValueError(f"{label}: stage RPT differs from raw responses")
+        stages[label] = audit
+    complete = all(not stage["issues"] for stage in stages.values())
+    total = sum(stage["known_total"] for stage in stages.values()) if complete else None
+    if complete and total != run["provider_rpt"]:
+        raise ValueError("full-run RPT differs from raw responses")
+    return {
+        run["arm"]: {
+            "stages": stages,
+            "complete_usage": complete,
+            "total": total,
+            "recorded_quality_status": run["status"],
+        }
+    }
+
+
 def audit_run(root):
     out = {}
     prompts = {}
     results = read(root / "run.json")
+    if results.get("kind") in (
+        "public-local-full-sdd-pilot",
+        "public-full-sdd-contract-simulation",
+    ):
+        return audit_full_run(root, results)
     for arm in ("shared", "fresh"):
         tasks = [audit_task(root / arm / f"task-{i}") for i in (1, 2)]
         checks_ok = []
