@@ -42,6 +42,18 @@ ATTEMPT_COLUMNS = (
     "Расход квоты Go",
     "Состояние",
 )
+PILOT_TITLE = "Живые пилоты H-03 вне зачёта"
+PILOT_COLUMNS = (
+    "Пара",
+    "Фича и модель",
+    "RPT",
+    "Изменение RPT",
+    "Вызовы",
+    "QA BASE",
+    "QA OPT",
+    "Учёт",
+)
+H03_FLAG = "tool_output_compression"
 STAGE_NAMES = {
     "propose": "Предложение",
     "spec": "Спецификация",
@@ -323,6 +335,111 @@ def collect(root):
         if a.score_eligible and a.manifest.get("pair_id"):
             pairs[a.manifest["pair_id"]].append(a)
     return attempts, {key: compare_arms(arms) for key, arms in sorted(pairs.items())}
+
+
+def pilot_pairs(attempts):
+    grouped = defaultdict(list)
+    for arm in attempts:
+        pair = arm.manifest.get("pair_id")
+        if arm.live and arm.exploratory and isinstance(pair, str) and pair:
+            grouped[pair].append(arm)
+    for pair, arms in sorted(grouped.items()):
+        if sorted(a.manifest.get("branch", "") for a in arms) != ["base", "opt"]:
+            continue
+        base, opt = sorted(arms, key=lambda a: a.manifest["branch"])
+        if (
+            not all(
+                arm.meter_ok
+                and arm.manifest.get("pipeline_complete") is True
+                and arm.manifest.get("final_commit")
+                and arm.manifest.get("status") in ("complete", "failed")
+                and arm.manifest.get("mode") == mode
+                for arm, mode in ((base, "baseline"), (opt, "optimized"))
+            )
+            or not base.rpt
+        ):
+            continue
+        b, o = base.manifest, opt.manifest
+        if any(
+            b.get(key) is None or b[key] != o.get(key)
+            for key in (*CONTROLS, "series_id")
+        ):
+            continue
+        base_image, opt_image = [
+            (m.get("isolation") or {}).get("image") for m in (b, o)
+        ]
+        base_plugin, opt_plugin = [
+            (m.get("metering") or {}).get("plugin_sha256") for m in (b, o)
+        ]
+        if (
+            not isinstance(base_image, str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", base_image)
+            or base_image != opt_image
+            or not isinstance(base_plugin, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", base_plugin)
+            or base_plugin != opt_plugin
+        ):
+            continue
+        base_flags, opt_flags = b.get("flags"), o.get("flags")
+        if (
+            not isinstance(base_flags, dict)
+            or not isinstance(opt_flags, dict)
+            or H03_FLAG not in base_flags
+            or base_flags.keys() != opt_flags.keys()
+            or any(value is not False for value in base_flags.values())
+            or any(value is not (name == H03_FLAG) for name, value in opt_flags.items())
+        ):
+            continue
+        yield pair, base, opt
+
+
+def pilot_quality(arm):
+    if arm.qa_receipt:
+        qa = arm.qa_receipt
+        outcome = "положительная" if qa["signed_quality"]["passed"] else "отрицательная"
+        status = f"независимая оценка {outcome}"
+        suites, total_key, path = qa["tests"], "observed", arm.qa_receipt_path
+    else:
+        gates = arm.manifest.get("gates") or {}
+        if gates.get("final_commit") != arm.manifest.get("final_commit"):
+            return "—", None
+        status = {
+            True: "автоматические гейты пройдены",
+            False: "автоматические гейты не закрыты",
+        }.get(gates.get("ok"), "результаты тестов")
+        suites, total_key, path = (
+            gates.get("suites") or {},
+            "total",
+            arm.path / "manifest.json",
+        )
+    items = [status]
+    for key, label in (("public", "публичные"), ("hidden", "закрытые")):
+        counts = suites.get(key) or {}
+        passed, total = counts.get("passed"), counts.get(total_key)
+        if type(passed) is int and type(total) is int and 0 <= passed <= total:
+            items.append(f"{label} {passed}/{total}")
+    return ", ".join(items), path
+
+
+def pilot_rows(attempts, escape, link):
+    for pair, base, opt in pilot_pairs(attempts):
+        manifest = base.manifest
+        quality = []
+        for arm in (base, opt):
+            status, path = pilot_quality(arm)
+            quality.append(link(path, status) if path else status)
+        yield [
+            escape(pair),
+            escape(f"{manifest['feature_id']} · {manifest['model']}"),
+            f"{base.rpt} → {opt.rpt}",
+            f"{(opt.rpt - base.rpt) / base.rpt:+.2%}",
+            f"{len(base.model_calls)} → {len(opt.model_calls)}",
+            *quality,
+            " · ".join(
+                link(a.path / "meter.json", branch)
+                for a, branch in ((base, "BASE"), (opt, "OPT"))
+            ),
+        ]
 
 
 def esc_md(value):
@@ -793,6 +910,13 @@ def report_parts(attempts, pairs, out, prototype=()):
                 ),
             ]
         )
+    pilots = list(
+        pilot_rows(
+            attempts, esc_md, lambda p, label: f"[{esc_md(label)}]({ref(out, p)})"
+        )
+    )
+    if pilots:
+        parts.extend([f"## {PILOT_TITLE}", table(PILOT_COLUMNS, pilots)])
     accounting = baseline_accounting(attempts)
     if accounting:
         parts.extend(["## Учёт расхода на базовом конвейере", accounting])
@@ -1075,6 +1199,20 @@ def write_dashboard(attempts, pairs, out, prototype=()):
         )
         prototype_section += (
             f"<h2>Подтверждённые результаты прототипа</h2><ul>{findings}</ul>"
+        )
+    pilots = list(
+        pilot_rows(attempts, e, lambda p, label: dashboard_link(out, p, label))
+    )
+    if pilots:
+        headings = "".join(
+            f'<th scope="col">{e(label)}</th>' for label in PILOT_COLUMNS
+        )
+        entries = "".join(
+            "<tr>" + "".join(f"<td>{v}</td>" for v in row) + "</tr>" for row in pilots
+        )
+        prototype_section += (
+            f'<h2>{PILOT_TITLE}</h2><div class="table-scroll"><table><thead><tr>{headings}'
+            f"</tr></thead><tbody>{entries}</tbody></table></div>"
         )
     accounting = baseline_accounting(attempts)
     if accounting:

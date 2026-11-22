@@ -480,3 +480,67 @@ def test_h03_live_probe_reports_both_signed_changes_outside_scored_pairs(tmp_pat
     assert "Экономия токенов на полной фиче пока не подтверждена" in (
         out / "REPORT.md"
     ).read_text(encoding="utf-8")
+
+
+def test_h03_pilot_reports_only_metered_matched_finished_arms(tmp_path):
+    root = tmp_path / "runs"
+    for branch, total in (("base", 100), ("opt", 70)):
+        folder = make_arm(root, branch, branch, total)
+        path = folder / "manifest.json"
+        manifest = report.read_json(path)
+        manifest.update(
+            purpose="h03-pilot",
+            mode="baseline" if branch == "base" else "optimized",
+            flags={"tool_output_compression": branch == "opt", "capsule": False},
+            isolation={"image": "sha256:" + "a" * 64},
+            metering={"plugin_sha256": "b" * 64},
+            pipeline_complete=True,
+            status="failed",
+            accepted=False,
+        )
+        if branch == "base":
+            manifest["gates"] = {
+                "final_commit": manifest["final_commit"],
+                "ok": False,
+                "suites": {"public": {"passed": 10, "total": 10}},
+            }
+        save(path, manifest)
+    (root / "summary").mkdir()
+    save(
+        root / "summary" / "opt-quality.json",
+        {
+            "run_id": "opt",
+            "final_commit": "snap",
+            "manifest_sha256": report.sha256(root / "opt" / "manifest.json"),
+            "signed_quality": {"passed": False},
+            "tests": {
+                "public": {"passed": 8, "observed": 10},
+                "hidden": {"passed": 2, "observed": 2},
+            },
+            "review_rounds": 1,
+        },
+    )
+    out = tmp_path / "output"
+    report.write_report(root, out)
+    for filename in ("REPORT.md", "dashboard.html"):
+        text = (out / filename).read_text(encoding="utf-8")
+        assert "Живые пилоты H-03 вне зачёта" in text
+        assert "100 → 70" in text and "-30.00%" in text and "1 → 1" in text
+        assert "автоматические гейты не закрыты, публичные 10/10" in text
+        assert "независимая оценка отрицательная, публичные 8/10, закрытые 2/2" in text
+    assert report.collect(root)[1] == {}
+
+    base, opt = report.collect(root)[0]
+    for wrong in (
+        {"pair_id": "different"},
+        {"config_hash": "different"},
+        {"isolation": {"image": "sha256:" + "c" * 64}},
+        {"metering": {}},
+        {"flags": {"tool_output_compression": True, "capsule": True}},
+        {"pipeline_complete": False},
+        {"dry_run": True},
+    ):
+        other = report.Attempt(opt.path, {**opt.manifest, **wrong}, meter_ok=True)
+        assert list(report.pilot_pairs((base, other))) == []
+    opt.meter_ok = False
+    assert list(report.pilot_pairs((base, opt))) == []
