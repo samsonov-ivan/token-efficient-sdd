@@ -7,7 +7,7 @@ Frugal сравнивает обычный и оптимизированный �
 Подготовьте Git, Node.js 24.15.0, npm и Python 3.11+. После установки зависимостей демонстрация работает локально, без Docker и API-ключей.
 
 ```bash
-git clone --branch codex/frugal-integration https://github.com/samsonov-ivan/token-efficient-sdd.git frugal
+git clone --depth 1 --branch codex/frugal-integration https://github.com/samsonov-ivan/token-efficient-sdd.git frugal
 cd frugal
 npm ci
 npm run build
