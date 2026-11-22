@@ -1,0 +1,455 @@
+{
+  "final_commit": "73cfbd44d2aea4457d8ca224c4918bd7f167b847",
+  "links": [
+    {
+      "assertion": {
+        "line": 230,
+        "path": "tests/test_history_export.py",
+        "text": "assert render_csv(\"alice\", []) == ("
+      },
+      "code": {
+        "line": 115,
+        "path": "src/minibank/history_export.py",
+        "text": "writer.writerow(HEADER)"
+      },
+      "scenario": "SCN-CSV-01.1",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_csv_starts_with_the_fixed_header_and_ends_rows_with_crlf"
+    },
+    {
+      "assertion": {
+        "line": 318,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.headers[\"content-type\"] == \"text/csv; charset=utf-8\""
+      },
+      "code": {
+        "line": 65,
+        "path": "src/minibank/api.py",
+        "text": "media_type=\"text/csv\","
+      },
+      "scenario": "SCN-CSV-01.1",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_history_csv_response_is_utf8_without_bom"
+    },
+    {
+      "assertion": {
+        "line": 320,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.content.decode(\"utf-8\") == ("
+      },
+      "code": {
+        "line": 62,
+        "path": "src/minibank/service.py",
+        "text": "return history_export.render_csv(account_id, selected).encode(\"utf-8\")"
+      },
+      "scenario": "SCN-CSV-01.1",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_history_csv_response_is_utf8_without_bom"
+    },
+    {
+      "assertion": {
+        "line": 334,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.text == \"id,created_at,source,destination,amount,type\\r\\n\""
+      },
+      "code": {
+        "line": 115,
+        "path": "src/minibank/history_export.py",
+        "text": "writer.writerow(HEADER)"
+      },
+      "scenario": "SCN-CSV-01.2",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_empty_history_csv_contains_only_the_header"
+    },
+    {
+      "assertion": {
+        "line": 342,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.status_code == 404"
+      },
+      "code": {
+        "line": 15,
+        "path": "src/minibank/repository.py",
+        "text": "raise DomainError(404, \"account_not_found\")"
+      },
+      "scenario": "SCN-CSV-01.2",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_unknown_account_returns_the_stable_json_error"
+    },
+    {
+      "assertion": {
+        "line": 343,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.json() == {\"error\": {\"code\": \"account_not_found\"}}"
+      },
+      "code": {
+        "line": 30,
+        "path": "src/minibank/api.py",
+        "text": "return JSONResponse({\"error\": {\"code\": error.code}}, status_code=error.status)"
+      },
+      "scenario": "SCN-CSV-01.2",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_unknown_account_returns_the_stable_json_error"
+    },
+    {
+      "assertion": {
+        "line": 401,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.text == \"id,created_at,source,destination,amount,type\\r\\n\""
+      },
+      "code": {
+        "line": 115,
+        "path": "src/minibank/history_export.py",
+        "text": "writer.writerow(HEADER)"
+      },
+      "scenario": "SCN-CSV-01.2",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_integration_empty_history_is_header_only"
+    },
+    {
+      "assertion": {
+        "line": 248,
+        "path": "tests/test_history_export.py",
+        "text": "assert render_csv(\"alice\", transfers) == ("
+      },
+      "code": {
+        "line": 117,
+        "path": "src/minibank/history_export.py",
+        "text": "writer.writerow("
+      },
+      "scenario": "SCN-CSV-01.3",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_csv_serializes_integer_ids_amounts_direction_and_utc_timestamps"
+    },
+    {
+      "assertion": {
+        "line": 252,
+        "path": "tests/test_history_export.py",
+        "text": "assert render_csv(\"bob\", transfers).endswith("
+      },
+      "code": {
+        "line": 126,
+        "path": "src/minibank/history_export.py",
+        "text": "classify_direction(transfer[\"source\"], account_id),"
+      },
+      "scenario": "SCN-CSV-01.3",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_csv_serializes_integer_ids_amounts_direction_and_utc_timestamps"
+    },
+    {
+      "assertion": {
+        "line": 278,
+        "path": "tests/test_history_export.py",
+        "text": "assert render_csv(\"bob\", transfers).splitlines()[1] == ("
+      },
+      "code": {
+        "line": 113,
+        "path": "src/minibank/history_export.py",
+        "text": "output, lineterminator=\"\\r\\n\", quoting=csv.QUOTE_MINIMAL"
+      },
+      "scenario": "SCN-CSV-01.3",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_csv_quotes_identifiers_per_rfc_4180[shop,1-\"shop,1\"]"
+    },
+    {
+      "assertion": {
+        "line": 278,
+        "path": "tests/test_history_export.py",
+        "text": "assert render_csv(\"bob\", transfers).splitlines()[1] == ("
+      },
+      "code": {
+        "line": 113,
+        "path": "src/minibank/history_export.py",
+        "text": "output, lineterminator=\"\\r\\n\", quoting=csv.QUOTE_MINIMAL"
+      },
+      "scenario": "SCN-CSV-01.3",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_csv_quotes_identifiers_per_rfc_4180[say \"hi\"-\"say \"\"hi\"\"\"]"
+    },
+    {
+      "assertion": {
+        "line": 298,
+        "path": "tests/test_history_export.py",
+        "text": "assert format_stored_timestamp(parse_stored_timestamp(stored)) == rendered"
+      },
+      "code": {
+        "line": 94,
+        "path": "src/minibank/history_export.py",
+        "text": "return f\"{whole_seconds}.{fraction}Z\""
+      },
+      "scenario": "SCN-CSV-01.3",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_legacy_timestamps_are_normalized_to_utc_and_keep_fractions[2026-01-02T03:04:05.120000+03:00-2026-01-02T00:04:05.12Z]"
+    },
+    {
+      "assertion": {
+        "line": 68,
+        "path": "tests/test_history_export.py",
+        "text": "assert [row[\"id\"] for row in rows] == [first[\"id\"], third[\"id\"], second[\"id\"]]"
+      },
+      "code": {
+        "line": 99,
+        "path": "src/minibank/repository.py",
+        "text": "f\"SELECT * FROM transfers WHERE {condition} ORDER BY id ASC\", parameters"
+      },
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.1",
+      "test": "tests.test_history_export::test_export_selects_each_related_transfer_once_in_ascending_id_order"
+    },
+    {
+      "assertion": {
+        "line": 69,
+        "path": "tests/test_history_export.py",
+        "text": "assert unrelated[\"id\"] not in [row[\"id\"] for row in rows]"
+      },
+      "code": {
+        "line": 96,
+        "path": "src/minibank/repository.py",
+        "text": "condition = \"source = ? OR destination = ?\""
+      },
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.1",
+      "test": "tests.test_history_export::test_export_selects_each_related_transfer_once_in_ascending_id_order"
+    },
+    {
+      "assertion": {
+        "line": 80,
+        "path": "tests/test_history_export.py",
+        "text": "assert [row[\"id\"] for row in rows] == [record[\"id\"]]"
+      },
+      "code": {
+        "line": 96,
+        "path": "src/minibank/repository.py",
+        "text": "condition = \"source = ? OR destination = ?\""
+      },
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.1",
+      "test": "tests.test_history_export::test_self_transfer_is_emitted_once_as_outgoing"
+    },
+    {
+      "assertion": {
+        "line": 485,
+        "path": "tests/test_history_export.py",
+        "text": "assert [int(item[0]) for item in rows] == ["
+      },
+      "code": {
+        "line": 58,
+        "path": "src/minibank/service.py",
+        "text": "transfers = repository.list_transfers_for_export("
+      },
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_integration_exports_owned_transfers_once_in_ascending_id_order"
+    },
+    {
+      "assertion": {
+        "line": 220,
+        "path": "tests/test_history_export.py",
+        "text": "assert [item[\"id\"] for item in outgoing_rows] == ["
+      },
+      "code": {
+        "line": 90,
+        "path": "src/minibank/repository.py",
+        "text": "condition = \"source = ?\""
+      },
+      "scenario": "SCN-CSV-02.2",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_direction_filter_selects_only_matching_operations"
+    },
+    {
+      "assertion": {
+        "line": 224,
+        "path": "tests/test_history_export.py",
+        "text": "assert [item[\"id\"] for item in incoming_rows] == [incoming[\"id\"]]"
+      },
+      "code": {
+        "line": 93,
+        "path": "src/minibank/repository.py",
+        "text": "condition = \"destination = ? AND source <> ?\""
+      },
+      "scenario": "SCN-CSV-02.2",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_direction_filter_selects_only_matching_operations"
+    },
+    {
+      "assertion": {
+        "line": 354,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.status_code == 422"
+      },
+      "code": {
+        "line": 43,
+        "path": "src/minibank/history_export.py",
+        "text": "raise DomainError(422, \"invalid_export_query\")"
+      },
+      "scenario": "SCN-CSV-02.2",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_unknown_export_direction_returns_the_stable_json_error[type=sideways]"
+    },
+    {
+      "assertion": {
+        "line": 355,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.json() == {\"error\": {\"code\": \"invalid_export_query\"}}"
+      },
+      "code": {
+        "line": 30,
+        "path": "src/minibank/api.py",
+        "text": "return JSONResponse({\"error\": {\"code\": error.code}}, status_code=error.status)"
+      },
+      "scenario": "SCN-CSV-02.2",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_unknown_export_direction_returns_the_stable_json_error[type=sideways]"
+    },
+    {
+      "assertion": {
+        "line": 184,
+        "path": "tests/test_history_export.py",
+        "text": "assert [item[\"id\"] for item in selected] == expected_ids"
+      },
+      "code": {
+        "line": 102,
+        "path": "src/minibank/history_export.py",
+        "text": "if query.start is not None and utc_date < query.start:"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_period_filter_is_inclusive_by_utc_date[2026-01-02-2026-01-02-expected_ids2]"
+    },
+    {
+      "assertion": {
+        "line": 184,
+        "path": "tests/test_history_export.py",
+        "text": "assert [item[\"id\"] for item in selected] == expected_ids"
+      },
+      "code": {
+        "line": 104,
+        "path": "src/minibank/history_export.py",
+        "text": "if query.end is not None and utc_date > query.end:"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_period_filter_is_inclusive_by_utc_date[2026-01-02-2026-01-02-expected_ids2]"
+    },
+    {
+      "assertion": {
+        "line": 204,
+        "path": "tests/test_history_export.py",
+        "text": "assert [item[\"id\"] for item in filter_by_period(transfers, new_year)] == [3]"
+      },
+      "code": {
+        "line": 101,
+        "path": "src/minibank/history_export.py",
+        "text": "utc_date = parse_stored_timestamp(transfer[\"created_at\"]).moment.date()"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_period_filter_uses_utc_dates_and_accepts_legacy_years"
+    },
+    {
+      "assertion": {
+        "line": 139,
+        "path": "tests/test_history_export.py",
+        "text": "assert error.value.code == \"invalid_export_query\""
+      },
+      "code": {
+        "line": 47,
+        "path": "src/minibank/history_export.py",
+        "text": "raise DomainError(422, \"invalid_export_query\")"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_reversed_period_is_rejected"
+    },
+    {
+      "assertion": {
+        "line": 374,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.status_code == 422"
+      },
+      "code": {
+        "line": 59,
+        "path": "src/minibank/history_export.py",
+        "text": "raise DomainError(422, \"invalid_export_query\") from error"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_invalid_export_period_returns_the_stable_json_error[from=2026-02-30]"
+    },
+    {
+      "assertion": {
+        "line": 375,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.json() == {\"error\": {\"code\": \"invalid_export_query\"}}"
+      },
+      "code": {
+        "line": 30,
+        "path": "src/minibank/api.py",
+        "text": "return JSONResponse({\"error\": {\"code\": error.code}}, status_code=error.status)"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_invalid_export_period_returns_the_stable_json_error[from=2026-02-30]"
+    },
+    {
+      "assertion": {
+        "line": 424,
+        "path": "tests/test_history_export.py",
+        "text": "assert [int(item[0]) for item in rows[1:]] == [first[\"id\"], last[\"id\"]]"
+      },
+      "code": {
+        "line": 61,
+        "path": "src/minibank/service.py",
+        "text": "selected = history_export.filter_by_period(transfers, query)"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_integration_single_day_includes_first_moment_and_excludes_next_day"
+    },
+    {
+      "assertion": {
+        "line": 456,
+        "path": "tests/test_history_export.py",
+        "text": "assert [int(item[0]) for item in csv_rows(first_day)[1:]] == [early[\"id\"]]"
+      },
+      "code": {
+        "line": 75,
+        "path": "src/minibank/history_export.py",
+        "text": "int(match.group(\"year\")),"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_integration_extreme_dates_and_legacy_timestamp_formats"
+    },
+    {
+      "assertion": {
+        "line": 461,
+        "path": "tests/test_history_export.py",
+        "text": "assert [int(item[0]) for item in csv_rows(last_day)[1:]] == [late[\"id\"]]"
+      },
+      "code": {
+        "line": 104,
+        "path": "src/minibank/history_export.py",
+        "text": "if query.end is not None and utc_date > query.end:"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_integration_extreme_dates_and_legacy_timestamp_formats"
+    }
+  ],
+  "request_sha256": "11652d6c7063e8e29b4d8bbef56aa8655f8e43aeb2cf1736a609fc28ddf80241",
+  "reviewer": "Codex independent CSV acceptance reviewer, csv3 BASE",
+  "semantic": [
+    {
+      "reason": "The frozen delta preserves the six-column representation and the fractional value of old timestamps (spec.md:17–35). The separate route returns 200 text/csv and uses the existing DomainError JSON handler (api.py:28–30,56–66). The account lookup emits 404 for an absent account (repository.py:10–18). The ledger encodes UTF-8 directly and uses a read session (service.py:55–62). The RFC 4180 writer emits a fixed header with CRLF, applies standard escaping, and writes original integer IDs and amounts, literal identifiers, normalized UTC timestamps and direction (history_export.py:110–129). Legacy parsing normalizes whole seconds in UTC and carries fractional digits separately, trimming only trailing zeros when producing Z output (history_export.py:62–95). The pinned no-network public HTTP probe confirmed UTF-8, CRLF, the header-only and 404 cases, quoted non-ASCII identifiers, exact integer amounts above 2^53, unchanged database contents, and equal stored and exported UTC instants for legacy rows. An independent HTTP precision probe replayed with and without a date filter and preserved the stored .654321Z value exactly. The entire tracked public suite independently returned 120 passes.",
+      "requirement": "REQ-CSV-01",
+      "verdict": "pass"
+    },
+    {
+      "reason": "The delta specifies selection, exact-once ascending order, the type filter and inclusive UTC calendar dates (spec.md:43–62). Parameterized SQL selects each related integer ID once in ascending order and excludes unrelated transfers (repository.py:86–101). The incoming predicate excludes self-transfers, consistent with the outgoing label from the serializer (history_export.py:34–36). Strict calendar parsing rejects malformed or reversed dates and unknown direction with 422 invalid_export_query, returned through the shared JSON handler (history_export.py:39–59, api.py:28–30). The ledger applies the direction predicate and then independently compares both inclusive UTC date bounds without calculating an overflowing successor date (service.py:55–62, history_export.py:98–107). Tracked assertions cover self-transfers, both extreme dates, unpadded legacy years, and UTC offset conversion. The independent public HTTP probe confirmed one-sided and combined bounds, both calendar extremes, exact midnight and last-second inclusion, next-day exclusion, direction selection and stable query errors. The independent precision replay also selected the whole day correctly with a fractional last-second operation.",
+      "requirement": "REQ-CSV-02",
+      "verdict": "pass"
+    }
+  ],
+  "version": 1
+}
