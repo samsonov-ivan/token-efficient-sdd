@@ -38,13 +38,14 @@ const { values: options } = parseArgs({
       'arms',
       'context',
       'max-output',
+      'target-file',
       'help',
     ].map((k) => [k, { type: k === 'help' ? 'boolean' : 'string' }]),
   ),
 });
 if (options.help) {
   console.log(
-    'node scripts/pilot-task-context.mjs --fixture DIR --endpoint http://127.0.0.1:PORT/v1 --model ID --out NEW_DIR [--arms shared,fresh] [--steps 8] [--timeout-ms 420000] [--context 32768] [--max-output 2048]',
+    'node scripts/pilot-task-context.mjs --fixture DIR --endpoint http://127.0.0.1:PORT/v1 --model ID --out NEW_DIR [--arms shared,fresh] [--steps 8] [--timeout-ms 420000] [--context 32768] [--max-output 2048] [--target-file BASENAME]',
   );
   process.exit(0);
 }
@@ -65,6 +66,8 @@ const limits = {
   output: positive(options['max-output'] ?? 2048),
 };
 assert(limits.context > limits.output);
+const targetFile = options['target-file'];
+if (targetFile !== undefined) assert(/^[A-Za-z0-9][\w.-]*$/.test(targetFile), 'Expected a filename in the fixture root');
 const fixtureFile = realpathSync(join(resolve(options.fixture), 'fixture.mjs'));
 const fixture = await import(pathToFileURL(fixtureFile).href);
 const out = resolve(options.out);
@@ -102,6 +105,7 @@ const run = {
   opencode_version: '1.19.6',
   fixture_sha256: digest(readFileSync(fixtureFile)),
   spec: fixture.brief,
+  target_file: targetFile,
   handoff: fixture.handoff,
   quality: 'deterministic public checks; no model spec/review/verify',
   results: {},
@@ -143,7 +147,12 @@ try {
     for (const task of [1, 2]) {
       const taskDir = join(dir, 'task-' + task);
       mkdirSync(join(taskDir, 'calls'), { recursive: true });
-      const prompt = await fixture.promptForTask(repo, task);
+      let prompt = await fixture.promptForTask(repo, task);
+      if (targetFile) {
+        const target = join(repo, targetFile);
+        assert.equal(realpathSync(target), target);
+        prompt += `\n\nUse this exact filePath for native read and edit calls: ${target}`;
+      }
       if (task === 2) assert(prompt.includes(fixture.handoff));
       if (prompts[task]) assert.equal(prompt, prompts[task], 'Prompts differ across arms');
       prompts[task] = prompt;
