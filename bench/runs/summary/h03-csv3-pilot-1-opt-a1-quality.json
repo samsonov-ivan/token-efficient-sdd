@@ -1,0 +1,114 @@
+{
+  "run_id": "h03-csv3-pilot-1-opt-a1",
+  "purpose": "h03-pilot",
+  "feature": "export-history-csv",
+  "runner_commit": "9de80b72f3c513db906b1fafcfac091788e78487",
+  "final_commit": "1fdfcb50990e57468974915555da92d0592c0aeb",
+  "final_tree": "e940fe28aacdd621fc93d0536355f995dd87d922",
+  "manifest_sha256": "9da3bd0588d0d312dd8a42d0a02bad92298c6b350c7b4d20005d619128525db6",
+  "requirements_sha256": "20509723588cbd83fc67cb19a6538adbfe11c6cdd2aacc8ad2dbbe351378f5f1",
+  "oracle_sha256": "2fa8e442c678d8c3b0bb8ee8555ebf6b9d93882ea807bfc08dccb376d4a815d3",
+  "pipeline_complete": true,
+  "status": "complete",
+  "accepted": true,
+  "review_rounds": 1,
+  "tests": {
+    "public": {
+      "passed": 95,
+      "observed": 95,
+      "skipped": 0
+    },
+    "hidden": {
+      "passed": 16,
+      "observed": 16,
+      "skipped": 0
+    }
+  },
+  "signed_quality": {
+    "passed": true,
+    "signature": "Ed25519",
+    "metrics": {
+      "Cov_req": 1,
+      "Cov_scn": 1,
+      "Cov_task": 1,
+      "Cov_expected": 1,
+      "Green": 1,
+      "Cons": 1,
+      "Q_hidden": 1,
+      "R": 1
+    },
+    "request_sha256": "bb9097b3d6146671d467e710b6ef6e2cbc905300c457aeda8b93477a817de21c",
+    "files": {
+      "assessment.json": "h03-csv3-pilot-1-opt-a1-assessment.json",
+      "assessment.sig": "h03-csv3-pilot-1-opt-a1-assessment.sig",
+      "reviewer.pem": "h03-csv3-pilot-1-opt-a1-reviewer.pem"
+    },
+    "artifact_sha256": {
+      "assessment.json": "cab994dc05bf6c5976aa93f1bcbe293eb1dc6f50991a6dcb6343861429f7a302",
+      "assessment.sig": "3946fd0c17418221a7d343403bd4a24c63ce486d898b1f2611fdc809be70d417",
+      "reviewer.pem": "ed73cd0f38ade219cbc5e727e5b576ef91e9b34e884eaccfdde65d664f8ad027"
+    }
+  },
+  "meter_replay": {
+    "complete": true,
+    "rpt": 3828449,
+    "model_calls": 88,
+    "by_stage": {
+      "apply": {
+        "t_in": 61491,
+        "t_cache_read": 1871360,
+        "t_cache_write": 0,
+        "t_out": 12005,
+        "t_reasoning": 19100,
+        "rpt": 1963956,
+        "known_rpt": 1963956,
+        "cost": 0,
+        "call_count": 41,
+        "peak_context": 60788,
+        "cache_hit_fraction": 0.9681863733935001
+      },
+      "review": {
+        "t_in": 74481,
+        "t_cache_read": 413440,
+        "t_cache_write": 0,
+        "t_out": 3273,
+        "t_reasoning": 41406,
+        "rpt": 532600,
+        "known_rpt": 532600,
+        "cost": 0,
+        "call_count": 13,
+        "peak_context": 75514,
+        "cache_hit_fraction": 0.8473502882638788
+      },
+      "spec": {
+        "t_in": 50974,
+        "t_cache_read": 636416,
+        "t_cache_write": 0,
+        "t_out": 6244,
+        "t_reasoning": 11539,
+        "rpt": 705173,
+        "known_rpt": 705173,
+        "cost": 0,
+        "call_count": 21,
+        "peak_context": 51368,
+        "cache_hit_fraction": 0.9258441350616099
+      },
+      "verify": {
+        "t_in": 66787,
+        "t_cache_read": 543488,
+        "t_cache_write": 0,
+        "t_out": 3805,
+        "t_reasoning": 12640,
+        "rpt": 626720,
+        "known_rpt": 626720,
+        "cost": 0,
+        "call_count": 13,
+        "peak_context": 67991,
+        "cache_hit_fraction": 0.8905624513538979
+      }
+    },
+    "balance_charge": 0,
+    "ledger_sha256": "b21fefd44a7f294bddf1e2077608b496fde4611816479e086d067fdea15a2501"
+  },
+  "eligible_for_scored_pair": false
+}

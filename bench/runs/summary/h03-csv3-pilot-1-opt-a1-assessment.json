@@ -1,0 +1,422 @@
+{
+  "artifact_links": [
+    {
+      "line": 8,
+      "path": "openspec/changes/export-history-csv/tasks.md",
+      "reason": "The checkbox explicitly requires the route to return 200 text/csv with the fixed header, the HTTP portion of SCN-CSV-01.1.",
+      "refs": [
+        "SCN-CSV-01.1"
+      ],
+      "task": "1.4",
+      "text": "- [x] 1.4 Wire `GET /accounts/{account_id}/history.csv` and map failures to the required HTTP responses (REQ-CSV-01, REQ-CSV-02, SCN-CSV-01.2, SCN-CSV-02.2, SCN-CSV-02.3): return 200 `text/csv` with the fixed header, 404 `account_not_found` for an unknown account and 422 `invalid_export_query` for an unknown type, malformed date or reversed period, all using the standard JSON error shape. Add HTTP tests marked `@pytest.mark.task(\"1.4\")` with the cited scenario IDs, document the endpoint and parameters in `README.md`, and verify with `uv run --locked python -m pytest -q tests/test_history_export.py -k http`."
+    }
+  ],
+  "compatibility_diagnostic": {
+    "finding": "An injected ISO decimal-comma fraction accepted by Python datetime.fromisoformat is rejected by the candidate regex at history_csv.py:15–19 and 55–57. The supplemental probe preserved a nine-digit dot fraction under both queries.",
+    "log_sha256": "0c74b834ac83188627ee0ee3d5c1be604eb3052a65fc6ca774a9eb207b0b631b",
+    "probe_sha256": "38e72fb9e0b155558820f4835c9bcafea40698ec5f2b2c3a0a84f37bad9b54f3",
+    "results": {
+      "iso_comma_fraction": {
+        "error": "ValueError: unsupported timestamp: '2026-03-04T23:59:59,654321Z'",
+        "input": "2026-03-04T23:59:59,654321Z",
+        "passed": false,
+        "stdlib_utc_parse": "2026-03-04T23:59:59.654321+00:00"
+      },
+      "long_dot_fraction": {
+        "checks": {
+          "all_fixture_rows_exported": true,
+          "filtered_utc_instant_preserved": true,
+          "unfiltered_utc_instant_preserved": true,
+          "whole_utc_day_inclusive": true
+        },
+        "expected_day_ids": [
+          102,
+          103
+        ],
+        "filtered_export": "2026-03-04T23:59:59.654321987Z",
+        "filtered_ids": [
+          102,
+          103
+        ],
+        "input": "2026-03-04T23:59:59.654321987Z",
+        "passed": true,
+        "query_date": "2026-03-04",
+        "stdlib_utc_parse": "2026-03-04T23:59:59.654321+00:00",
+        "stored": "2026-03-04T23:59:59.654321987Z",
+        "unfiltered_export": "2026-03-04T23:59:59.654321987Z",
+        "unfiltered_ids": [
+          101,
+          102,
+          103,
+          104
+        ]
+      }
+    },
+    "scope": "Supplemental observation outside the declared persisted formats in the acceptance probe. The pinned application writer at models.py:40–44 emits whole-second Z timestamps. The public brief requires preservation of legacy fractions and has no comma-form seed or example."
+  },
+  "final_commit": "1fdfcb50990e57468974915555da92d0592c0aeb",
+  "final_tree": "e940fe28aacdd621fc93d0536355f995dd87d922",
+  "links": [
+    {
+      "assertion": {
+        "line": 266,
+        "path": "tests/test_history_export.py",
+        "text": "assert document == HEADER_LINE"
+      },
+      "code": {
+        "line": 101,
+        "path": "src/minibank/history_csv.py",
+        "text": "writer = csv.writer(output, lineterminator=\"\\r\\n\")"
+      },
+      "scenario": "SCN-CSV-01.1",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_serialization_writes_fixed_header_crlf_and_no_bom"
+    },
+    {
+      "assertion": {
+        "line": 267,
+        "path": "tests/test_history_export.py",
+        "text": "assert not document.startswith(b\"\\xef\\xbb\\xbf\")"
+      },
+      "code": {
+        "line": 122,
+        "path": "src/minibank/history_csv.py",
+        "text": "return output.getvalue().encode(\"utf-8\")"
+      },
+      "scenario": "SCN-CSV-01.1",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_serialization_writes_fixed_header_crlf_and_no_bom"
+    },
+    {
+      "assertion": {
+        "line": 332,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.headers[\"content-type\"].split(\";\")[0] == \"text/csv\""
+      },
+      "code": {
+        "line": 67,
+        "path": "src/minibank/api.py",
+        "text": "media_type=\"text/csv\","
+      },
+      "scenario": "SCN-CSV-01.1",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_http_exports_text_csv_with_fixed_header"
+    },
+    {
+      "assertion": {
+        "line": 343,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.json() == {\"error\": {\"code\": \"account_not_found\"}}"
+      },
+      "code": {
+        "line": 15,
+        "path": "src/minibank/repository.py",
+        "text": "raise DomainError(404, \"account_not_found\")"
+      },
+      "scenario": "SCN-CSV-01.2",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_http_unknown_account_returns_account_not_found"
+    },
+    {
+      "assertion": {
+        "line": 429,
+        "path": "tests/test_history_export.py",
+        "text": "assert client.get(\"/accounts/alice/history.csv\").content == HEADER_LINE"
+      },
+      "code": {
+        "line": 102,
+        "path": "src/minibank/history_csv.py",
+        "text": "writer.writerow(HEADER)"
+      },
+      "scenario": "SCN-CSV-01.2",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_integration_export_is_scoped_bounded_and_read_only"
+    },
+    {
+      "assertion": {
+        "line": 287,
+        "path": "tests/test_history_export.py",
+        "text": "assert document == HEADER_LINE + expected_row.encode(\"utf-8\")"
+      },
+      "code": {
+        "line": 112,
+        "path": "src/minibank/history_csv.py",
+        "text": "writer.writerow("
+      },
+      "scenario": "SCN-CSV-01.3",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_serialization_writes_literal_fields_and_escapes_commas_and_quotes"
+    },
+    {
+      "assertion": {
+        "line": 313,
+        "path": "tests/test_history_export.py",
+        "text": "assert [row[1] for row in rows[1:]] == ["
+      },
+      "code": {
+        "line": 91,
+        "path": "src/minibank/history_csv.py",
+        "text": "f\"{fraction}Z\""
+      },
+      "scenario": "SCN-CSV-01.3",
+      "task": "1.3",
+      "test": "tests.test_history_export::test_serialization_normalizes_timestamps_and_preserves_fractional_seconds"
+    },
+    {
+      "assertion": {
+        "line": 68,
+        "path": "tests/test_history_export.py",
+        "text": "assert ids_of(ledger.export_history(\"alice\", ExportQuery())) == ["
+      },
+      "code": {
+        "line": 90,
+        "path": "src/minibank/repository.py",
+        "text": "\"\"\"SELECT * FROM transfers WHERE source = ? OR destination = ?"
+      },
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.1",
+      "test": "tests.test_history_export::test_selection_returns_related_operations_once_in_ascending_id_order"
+    },
+    {
+      "assertion": {
+        "line": 88,
+        "path": "tests/test_history_export.py",
+        "text": "assert selected == [record[\"id\"] for record in created]"
+      },
+      "code": {
+        "line": 91,
+        "path": "src/minibank/repository.py",
+        "text": "ORDER BY id ASC\"\"\","
+      },
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.1",
+      "test": "tests.test_history_export::test_selection_orders_many_operations_by_integer_id"
+    },
+    {
+      "assertion": {
+        "line": 101,
+        "path": "tests/test_history_export.py",
+        "text": "assert len(rows) == 2"
+      },
+      "code": {
+        "line": 90,
+        "path": "src/minibank/repository.py",
+        "text": "\"\"\"SELECT * FROM transfers WHERE source = ? OR destination = ?"
+      },
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.1",
+      "test": "tests.test_history_export::test_selection_prints_a_self_transfer_exactly_once"
+    },
+    {
+      "assertion": {
+        "line": 469,
+        "path": "tests/test_history_export.py",
+        "text": "assert after == before"
+      },
+      "code": {
+        "line": 50,
+        "path": "src/minibank/service.py",
+        "text": "with self.database.session() as connection:"
+      },
+      "scenario": "SCN-CSV-02.1",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_integration_export_is_scoped_bounded_and_read_only"
+    },
+    {
+      "assertion": {
+        "line": 130,
+        "path": "tests/test_history_export.py",
+        "text": "assert incoming_ids == [incoming[\"id\"]]"
+      },
+      "code": {
+        "line": 105,
+        "path": "src/minibank/history_csv.py",
+        "text": "if query.direction is not None and direction != query.direction:"
+      },
+      "scenario": "SCN-CSV-02.2",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_filtering_by_direction_is_relative_to_selected_account"
+    },
+    {
+      "assertion": {
+        "line": 131,
+        "path": "tests/test_history_export.py",
+        "text": "assert outgoing_ids == [outgoing[\"id\"], self_transfer[\"id\"]]"
+      },
+      "code": {
+        "line": 96,
+        "path": "src/minibank/history_csv.py",
+        "text": "return \"outgoing\" if record[\"source\"] == account_id else \"incoming\""
+      },
+      "scenario": "SCN-CSV-02.2",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_filtering_by_direction_is_relative_to_selected_account"
+    },
+    {
+      "assertion": {
+        "line": 363,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.json() == {\"error\": {\"code\": \"invalid_export_query\"}}"
+      },
+      "code": {
+        "line": 34,
+        "path": "src/minibank/history_csv.py",
+        "text": "raise DomainError(422, \"invalid_export_query\")"
+      },
+      "scenario": "SCN-CSV-02.2",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_http_invalid_query_returns_invalid_export_query[params0]"
+    },
+    {
+      "assertion": {
+        "line": 185,
+        "path": "tests/test_history_export.py",
+        "text": "assert from_ids == [record[\"id\"] for record in created[1:]] + [incoming[\"id\"]]"
+      },
+      "code": {
+        "line": 108,
+        "path": "src/minibank/history_csv.py",
+        "text": "if query.start is not None and moment.date() < query.start:"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_filtering_by_utc_period_is_inclusive_and_independent"
+    },
+    {
+      "assertion": {
+        "line": 186,
+        "path": "tests/test_history_export.py",
+        "text": "assert to_ids == [record[\"id\"] for record in created[:4]] + [incoming[\"id\"]]"
+      },
+      "code": {
+        "line": 110,
+        "path": "src/minibank/history_csv.py",
+        "text": "if query.end is not None and moment.date() > query.end:"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_filtering_by_utc_period_is_inclusive_and_independent"
+    },
+    {
+      "assertion": {
+        "line": 208,
+        "path": "tests/test_history_export.py",
+        "text": "assert ids_of("
+      },
+      "code": {
+        "line": 62,
+        "path": "src/minibank/history_csv.py",
+        "text": "int(parts[\"year\"]),"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.2",
+      "test": "tests.test_history_export::test_filtering_accepts_extreme_dates_and_legacy_timestamps"
+    },
+    {
+      "assertion": {
+        "line": 363,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.json() == {\"error\": {\"code\": \"invalid_export_query\"}}"
+      },
+      "code": {
+        "line": 50,
+        "path": "src/minibank/history_csv.py",
+        "text": "raise DomainError(422, \"invalid_export_query\") from None"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_http_invalid_query_returns_invalid_export_query[params2]"
+    },
+    {
+      "assertion": {
+        "line": 363,
+        "path": "tests/test_history_export.py",
+        "text": "assert response.json() == {\"error\": {\"code\": \"invalid_export_query\"}}"
+      },
+      "code": {
+        "line": 38,
+        "path": "src/minibank/history_csv.py",
+        "text": "raise DomainError(422, \"invalid_export_query\")"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.4",
+      "test": "tests.test_history_export::test_http_invalid_query_returns_invalid_export_query[params4]"
+    },
+    {
+      "assertion": {
+        "line": 466,
+        "path": "tests/test_history_export.py",
+        "text": "assert ids_of(filtered.content) == [boundary[\"id\"], last[\"id\"]]"
+      },
+      "code": {
+        "line": 110,
+        "path": "src/minibank/history_csv.py",
+        "text": "if query.end is not None and moment.date() > query.end:"
+      },
+      "scenario": "SCN-CSV-02.3",
+      "task": "1.5",
+      "test": "tests.test_history_export::test_integration_export_is_scoped_bounded_and_read_only"
+    }
+  ],
+  "manifest_sha256": "206e120a5b62500554ba11b0cd9b381660649f5a8dc5204a8fa3ff2b8da613c9",
+  "precision_probe_log_sha256": "037491fde121d841c42bc3ccd110b2fbaf49c4e17c0dfe195f515cb239b32a22",
+  "precision_probe_sha256": "5cc058e9c2d947655d8d3f0aa72b8f311aa00d0c3c3a960a8c31b600e6900a02",
+  "public_contract_probe_log_sha256": "09dba9de9207d973ba8d706240b67c91b61d170615d58287e062d2a6f4a91648",
+  "public_contract_probe_sha256": "c4e7f71e540d46129f80e41c2372978c40c0eb62ac8174dda580ab55a0e9ae80",
+  "public_pytest_log_sha256": "9579d85fad6324f8a702b73b1c6feb065a4348373c880d3e6cd6c6b5d56b7978",
+  "public_replay": {
+    "contract_probe": {
+      "passed": 19,
+      "total": 19
+    },
+    "network": "none",
+    "precision_probe": {
+      "checks": {
+        "all_fixture_rows_exported": true,
+        "filtered_utc_instant_preserved": true,
+        "unfiltered_utc_instant_preserved": true,
+        "whole_utc_day_inclusive": true
+      },
+      "expected_day_ids": [
+        102,
+        103
+      ],
+      "filtered_export": "2026-03-04T23:59:59.654321Z",
+      "filtered_ids": [
+        102,
+        103
+      ],
+      "passed": true,
+      "query_date": "2026-03-04",
+      "stored": "2026-03-04T23:59:59.654321Z",
+      "unfiltered_export": "2026-03-04T23:59:59.654321Z",
+      "unfiltered_ids": [
+        101,
+        102,
+        103,
+        104
+      ]
+    },
+    "pytest": {
+      "passed": 95,
+      "total": 95
+    }
+  },
+  "request_sha256": "a4e96ff3420f7338d187d3ba7c2115a78abe21a74f95b06600c9642f5c8b8c7b",
+  "reviewer": "Frugal independent post-pipeline QA (CSV OPT)",
+  "run_id": "h03-csv3-pilot-1-opt-a1",
+  "runner_image": "sha256:8d40a7050991b0ecb3ff6d7e8fc7155e307817c070d6eb33b203a03095ca447e",
+  "semantic": [
+    {
+      "reason": "The deployed route returns HTTP 200 text/csv. history_csv.py:99–122 emits the fixed header, CRLF, exact UTF-8 bytes with no BOM, literal quoted account IDs, decimal integer fields and relative direction. The HTTP contract probe verified incoming and outgoing row values, non-ASCII and quoted identifiers, large integer amount, header-only empty history, and the exact account-not-found JSON 404. history_csv.py:53–92 retains the original fractional digits while normalizing the whole time to UTC, including timestamps with a short year. Independent filtered and unfiltered HTTP probes reproduced the stored .654321Z value exactly. The supplemental dot-fraction check also preserved .654321987Z.",
+      "requirement": "REQ-CSV-01",
+      "verdict": "pass"
+    },
+    {
+      "reason": "repository.py:86–94 selects related rows using one OR predicate and orders by SQLite integer ID, which emitted both roles and excluded unrelated transfers in the independent replay. history_csv.py:95–110 selects direction relative to the account, uses source precedence for a self-transfer, and applies both date bounds independently and inclusively after UTC normalization. The public probes confirmed day boundaries with fractional seconds, the extreme years including a legacy short-year row, combining filters, and the standard JSON 422 errors for invalid or reversed ranges. The pre/post SQLite dumps matched and service.py:49–53 uses a read session with account lookup and SELECT only.",
+      "requirement": "REQ-CSV-02",
+      "verdict": "pass"
+    }
+  ],
+  "version": 1
+}

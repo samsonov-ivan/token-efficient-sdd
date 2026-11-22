@@ -1,0 +1,187 @@
+{
+  "pair_id": "h03-csv3-pilot-1",
+  "purpose": "h03-pilot",
+  "eligible_for_scored_pair": false,
+  "accepted_pair": true,
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "requested_variant": "max",
+  "input_commit": "77d839456fec7dca255e31b1a7bfbd64fb6f6f5d",
+  "runner_commit": "9de80b72f3c513db906b1fafcfac091788e78487",
+  "requirements_sha256": "20509723588cbd83fc67cb19a6538adbfe11c6cdd2aacc8ad2dbbe351378f5f1",
+  "oracle_sha256": "2fa8e442c678d8c3b0bb8ee8555ebf6b9d93882ea807bfc08dccb376d4a815d3",
+  "baseline_sha256": "bd5d3e928bde7061ff832c543da6924eb152bd4caf735e32eb21416a79aa64d9",
+  "docker_image": "sha256:8d40a7050991b0ecb3ff6d7e8fc7155e307817c070d6eb33b203a03095ca447e",
+  "plugin_sha256": "c377801b408513a863840129f1f1bbf8331b2d68cad4e11ca876ca9377abe7fd",
+  "baseline": {
+    "run_id": "h03-csv3-pilot-1-base-a1",
+    "status": "complete",
+    "accepted": true,
+    "pipeline_complete": true,
+    "final_commit": "73cfbd44d2aea4457d8ca224c4918bd7f167b847",
+    "duration_seconds": 1213.458,
+    "tests": {
+      "public": {
+        "passed": 120,
+        "observed": 120,
+        "skipped": 0
+      },
+      "hidden": {
+        "passed": 16,
+        "observed": 16,
+        "skipped": 0
+      }
+    },
+    "metering_complete": true,
+    "calls_with_evidence": 86,
+    "rpt": 3692446,
+    "known_rpt": 3692446,
+    "by_stage": {
+      "apply": {
+        "t_in": 60546,
+        "t_cache_read": 1315712,
+        "t_cache_write": 0,
+        "t_out": 13754,
+        "t_reasoning": 16628,
+        "rpt": 1406640,
+        "known_rpt": 1406640,
+        "cost": 0,
+        "call_count": 33,
+        "peak_context": 60724,
+        "cache_hit_fraction": 0.9560067952375209
+      },
+      "review": {
+        "t_in": 68696,
+        "t_cache_read": 588928,
+        "t_cache_write": 0,
+        "t_out": 3732,
+        "t_reasoning": 29079,
+        "rpt": 690435,
+        "known_rpt": 690435,
+        "cost": 0,
+        "call_count": 16,
+        "peak_context": 69708,
+        "cache_hit_fraction": 0.8955390922472416
+      },
+      "spec": {
+        "t_in": 58039,
+        "t_cache_read": 773376,
+        "t_cache_write": 0,
+        "t_out": 7534,
+        "t_reasoning": 13653,
+        "rpt": 852602,
+        "known_rpt": 852602,
+        "cost": 0,
+        "call_count": 22,
+        "peak_context": 58624,
+        "cache_hit_fraction": 0.9301925031422335
+      },
+      "verify": {
+        "t_in": 70781,
+        "t_cache_read": 651008,
+        "t_cache_write": 0,
+        "t_out": 3624,
+        "t_reasoning": 17356,
+        "rpt": 742769,
+        "known_rpt": 742769,
+        "cost": 0,
+        "call_count": 15,
+        "peak_context": 71638,
+        "cache_hit_fraction": 0.9019367155775442
+      }
+    },
+    "balance_charge": 0,
+    "retained_log_count": 0,
+    "evidence_sha256": {
+      "manifest.json": "9b797dd17c89074837d2eb634a8017cc952126f3811714d3509a3ec6cf74163d",
+      "meter.json": "4453a321e066ddf23c02ae32ab04076a129487a6c13eb5440dfa27dcc40865b0",
+      "calls.jsonl": "eef596b69c3f3b1c6a2ebc3eb15a625e9c4bbf7487c2b3108bddffab43382e6f"
+    }
+  },
+  "optimized": {
+    "run_id": "h03-csv3-pilot-1-opt-a1",
+    "status": "complete",
+    "accepted": true,
+    "pipeline_complete": true,
+    "final_commit": "1fdfcb50990e57468974915555da92d0592c0aeb",
+    "duration_seconds": 1239.782,
+    "tests": {
+      "public": {
+        "passed": 95,
+        "observed": 95,
+        "skipped": 0
+      },
+      "hidden": {
+        "passed": 16,
+        "observed": 16,
+        "skipped": 0
+      }
+    },
+    "metering_complete": true,
+    "calls_with_evidence": 88,
+    "rpt": 3828449,
+    "known_rpt": 3828449,
+    "by_stage": {
+      "apply": {
+        "t_in": 61491,
+        "t_cache_read": 1871360,
+        "t_cache_write": 0,
+        "t_out": 12005,
+        "t_reasoning": 19100,
+        "rpt": 1963956,
+        "known_rpt": 1963956,
+        "cost": 0,
+        "call_count": 41,
+        "peak_context": 60788,
+        "cache_hit_fraction": 0.9681863733935001
+      },
+      "review": {
+        "t_in": 74481,
+        "t_cache_read": 413440,
+        "t_cache_write": 0,
+        "t_out": 3273,
+        "t_reasoning": 41406,
+        "rpt": 532600,
+        "known_rpt": 532600,
+        "cost": 0,
+        "call_count": 13,
+        "peak_context": 75514,
+        "cache_hit_fraction": 0.8473502882638788
+      },
+      "spec": {
+        "t_in": 50974,
+        "t_cache_read": 636416,
+        "t_cache_write": 0,
+        "t_out": 6244,
+        "t_reasoning": 11539,
+        "rpt": 705173,
+        "known_rpt": 705173,
+        "cost": 0,
+        "call_count": 21,
+        "peak_context": 51368,
+        "cache_hit_fraction": 0.9258441350616099
+      },
+      "verify": {
+        "t_in": 66787,
+        "t_cache_read": 543488,
+        "t_cache_write": 0,
+        "t_out": 3805,
+        "t_reasoning": 12640,
+        "rpt": 626720,
+        "known_rpt": 626720,
+        "cost": 0,
+        "call_count": 13,
+        "peak_context": 67991,
+        "cache_hit_fraction": 0.8905624513538979
+      }
+    },
+    "balance_charge": 0,
+    "retained_log_count": 1,
+    "evidence_sha256": {
+      "manifest.json": "9da3bd0588d0d312dd8a42d0a02bad92298c6b350c7b4d20005d619128525db6",
+      "meter.json": "5b7d1554c1e77ca33af916f822ac96407da6deeef6a4330e83933e7c337b7228",
+      "calls.jsonl": "b21fefd44a7f294bddf1e2077608b496fde4611816479e086d067fdea15a2501"
+    }
+  },
+  "opt_minus_base_rpt": 136003,
+  "opt_minus_base_rpt_fraction": 0.0368327661393017
+}
