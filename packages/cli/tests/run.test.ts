@@ -1,3 +1,4 @@
+import { generateKeyPairSync, sign } from 'node:crypto';
 import {
   cpSync,
   existsSync,
@@ -15,9 +16,11 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { Ajv } from 'ajv';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { git, readJson, writeJson } from '../src/harness/io.js';
+import * as quality from '../src/gates.js';
+import { digest, git, hashTree, readJson, writeJson } from '../src/harness/io.js';
 import { flagsFor, parsePlan } from '../src/harness/plan.js';
 import { Container } from '../src/harness/runner.js';
+import * as meter from '../src/meter.js';
 import { type RunManifest, run } from '../src/run.js';
 
 const identity = {
@@ -625,4 +628,82 @@ describe('isolated run lifecycle', () => {
       'finished real model pipeline',
     );
   }, 60000);
+
+  it('archives only the verified detached signature and the public reviewer key', async () => {
+    const { project, out, input } = fixture();
+    const arm = join(out, 'signed');
+    const evaluation = join(arm, 'evaluation');
+    mkdirSync(evaluation, { recursive: true });
+    mkdirSync(join(arm, 'quality'));
+    const final = readFileSync(join(project, 'bench/repos/demo.sha'), 'utf8').trim();
+    cpSync(join(project, 'bench/repos/demo.bundle'), join(arm, 'final.bundle'));
+    cpSync(join(input, 'expected.yaml'), join(evaluation, 'expected.yaml'));
+    writeJson(join(evaluation, 'evidence.json'), {});
+    writeJson(join(evaluation, 'frozen-regression.json'), { ok: true });
+    const oracle = 'frozen-oracle';
+    writeJson(join(arm, 'manifest.json'), {
+      mode: 'baseline',
+      status: 'failed',
+      pipeline_complete: true,
+      dry_run: false,
+      final_commit: final,
+      feature_id: 'example-change',
+      expected_hash: hashTree(join(evaluation, 'expected.yaml')),
+      test_oracle_hash: oracle,
+    });
+    const hashes = ['evidence', 'frozen-regression'].map((stem) =>
+      hashTree(join(evaluation, `${stem}.json`)),
+    );
+    writeJson(join(evaluation, 'inputs.json'), {
+      final_commit: final,
+      bundle_hash: hashTree(join(arm, 'final.bundle')),
+      expected_hash: hashTree(join(evaluation, 'expected.yaml')),
+      oracle_hash: oracle,
+      evidence_hash: hashes[0],
+      regression_hash: hashes[1],
+    });
+    const assessment = Buffer.from('{"reviewer":"Independent fixture"}\n');
+    const pair = generateKeyPairSync('ed25519');
+    const signature = sign(null, assessment, pair.privateKey);
+    const reviewFile = join(project, 'assessment.json');
+    const sigFile = join(project, 'input.sig');
+    const keyFile = join(project, 'input.pem');
+    writeFileSync(reviewFile, assessment);
+    writeFileSync(sigFile, signature);
+    writeFileSync(keyFile, pair.privateKey.export({ type: 'pkcs8', format: 'pem' }));
+    const args = [
+      '--evaluate-only',
+      arm,
+      '--project',
+      project,
+      '--evidence',
+      reviewFile,
+      '--signature',
+      sigFile,
+      '--reviewer-key',
+      keyFile,
+    ];
+    const gates = vi.spyOn(quality, 'gates').mockImplementation(async (args) => {
+      writeJson(join(args[args.indexOf('--out') + 1], 'gates.json'), { ok: true });
+      return 0;
+    });
+    const usage = vi
+      .spyOn(meter, 'meterRun')
+      .mockResolvedValue({ complete: true } as Awaited<ReturnType<typeof meter.meterRun>>);
+    try {
+      expect(await run(args)).toBe(0);
+      const archive = join(evaluation, 'assessments', digest(assessment));
+      expect(readFileSync(join(archive, 'assessment.sig'))).toEqual(signature);
+      expect(readFileSync(join(archive, 'reviewer.pem'), 'utf8')).toEqual(
+        pair.publicKey.export({ type: 'spki', format: 'pem' }),
+      );
+      writeFileSync(sigFile, Buffer.alloc(signature.length));
+      await expect(run(args)).rejects.toThrow('Invalid assessment signature');
+      expect(readFileSync(join(archive, 'assessment.sig'))).toEqual(signature);
+    } finally {
+      gates.mockRestore();
+      usage.mockRestore();
+      rmSync(project, { recursive: true, force: true });
+    }
+  });
 });

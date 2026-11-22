@@ -1,4 +1,4 @@
-import { createHash, verify as verifySignature } from 'node:crypto';
+import { createHash, type KeyLike, verify as verifySignature } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { scenarioPattern } from './change.js';
@@ -148,6 +148,11 @@ export function prepareRequest(
   };
   return { ...request, request_sha256: digest(JSON.stringify(request)) };
 }
+export function verifyAssessmentSignature(bytes: Buffer, signature: Buffer, key: KeyLike) {
+  if (!verifySignature(null, bytes, key, signature))
+    throw new Error('Invalid assessment signature');
+}
+
 export function importAssessment(
   request: ReturnType<typeof prepareRequest>,
   ev: Evidence,
@@ -158,8 +163,8 @@ export function importAssessment(
   const bytes = readFileSync(path);
   if ((signature || key) && !(signature && key))
     throw new Error('Supply both a detached --signature and trusted --reviewer-key');
-  if (signature && key && !verifySignature(null, bytes, readFileSync(key), readFileSync(signature)))
-    throw new Error('Invalid assessment signature');
+  if (signature && key)
+    verifyAssessmentSignature(bytes, readFileSync(signature), readFileSync(key));
   const data = JSON.parse(bytes.toString('utf8'));
   if (
     data.version !== 1 ||

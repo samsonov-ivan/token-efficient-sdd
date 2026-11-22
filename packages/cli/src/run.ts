@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createPublicKey, randomBytes, randomUUID } from 'node:crypto';
 import {
   appendFileSync,
   copyFileSync,
@@ -8,6 +8,7 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
@@ -15,6 +16,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { parse } from 'yaml';
 import { executeBaseline, hashBaselineAssets } from './baseline.js';
 import { meterRun } from './meter.js';
+import { verifyAssessmentSignature } from './quality/reviewer.js';
 import { analysisPython } from './report.js';
 import { parseArgs } from 'node:util';
 import { gates } from './gates.js';
@@ -226,6 +228,21 @@ function bindInputs(file: string, signature: string) {
     readJson<{ signature: string }>(file).signature !== signature
   )
     throw new Error(`Frozen run inputs changed: ${file}`);
+}
+function saveSignedAssessment(dir: string, signature: Buffer, publicKey: string) {
+  const paths = ['assessment.sig', 'reviewer.pem'];
+  const staging = mkdtempSync(join(dir, '.signed-'));
+  try {
+    writeFileSync(join(staging, paths[0]), signature, { mode: 0o600 });
+    writeFileSync(join(staging, paths[1]), publicKey, { mode: 0o600 });
+    bindInputs(
+      join(dir, 'signed-inputs.json'),
+      digest(JSON.stringify([digest(signature), digest(publicKey)])),
+    );
+    for (const file of paths) renameSync(join(staging, file), join(dir, file));
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
 }
 function provenance(
   plan: Plan,
@@ -950,25 +967,28 @@ async function evaluateOnly(argv: string[]): Promise<number> {
   ];
   if (!v.evidence) return gates([...command, '--out', join(dir, 'quality'), '--prepare']);
   const assessment = readFileSync(v.evidence);
+  if (Boolean(v.signature) !== Boolean(v['reviewer-key']))
+    throw new Error('Supply both --signature and --reviewer-key');
+  const signature = v.signature ? readFileSync(v.signature) : null;
+  const reviewerKey = v['reviewer-key'] ? createPublicKey(readFileSync(v['reviewer-key'])) : null;
+  if (signature && reviewerKey) verifyAssessmentSignature(assessment, signature, reviewerKey);
   const sha = digest(assessment);
   const decisionDir = join(input, 'assessments', sha);
   mkdirSync(decisionDir, { recursive: true });
   const saved = join(decisionDir, 'assessment.json');
   writeFileSync(saved, assessment);
   const args = [...command, '--assessment', saved, '--infer', '--out', decisionDir];
-  if (Boolean(v.signature) !== Boolean(v['reviewer-key']))
-    throw new Error('Supply both --signature and --reviewer-key');
-  if (v.signature && v['reviewer-key'])
-    args.push(
-      '--signature',
-      realpathSync(v.signature),
-      '--reviewer-key',
-      realpathSync(v['reviewer-key']),
-    );
   const result = await gates(args);
   const usage = await meterRun(dir);
   if (result !== 0 || !usage.complete) return 1;
   bindInputs(join(input, 'accepted.json'), sha);
+  if (signature && reviewerKey) {
+    saveSignedAssessment(
+      decisionDir,
+      signature,
+      reviewerKey.export({ format: 'pem', type: 'spki' }).toString(),
+    );
+  }
   m.gates = readJson(join(decisionDir, 'gates.json'));
   m.hidden = (m.gates?.suites as { hidden?: Record<string, unknown> } | undefined)?.hidden ?? null;
   m.assessment_sha256 = sha;

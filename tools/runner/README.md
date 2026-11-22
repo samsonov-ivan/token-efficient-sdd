@@ -31,7 +31,7 @@ node packages/cli/bin/frugal.js run --evaluate-only bench/runs/RUN_ID
 node packages/cli/bin/frugal.js run --evaluate-only bench/runs/RUN_ID --evidence /absolute/qa/assessment.json
 ```
 
-Если сбор тестовых отчётов прервался, передайте прежний `--oracle-root` при первом вызове. Дополнительно можно передать `--signature FILE --reviewer-key PEM`. Засчитываются только проверенные результаты для сохранённого SHA и полная сверка meter. Проверка сохраняет собственное решение и отметку времени в evaluation/assessments. Модельное время, события и финальный Git bundle исходного плеча доступны отдельно.
+Если сбор тестовых отчётов прервался, передайте прежний `--oracle-root` при первом вызове. Дополнительно можно передать `--signature FILE --reviewer-key PEM`. Засчитываются только проверенные результаты для сохранённого SHA и полная сверка meter. Проверка сохраняет решение и отметку времени в `evaluation/assessments`. Для подписанного решения там же сохраняются проверенная подпись `assessment.sig` и открытый ключ `reviewer.pem`. Модельное время, события и финальный Git bundle исходного плеча доступны отдельно.
 
 ## Подписка OpenCode Go
 
