@@ -1,4 +1,4 @@
-# Пилоты H-01 на локальной модели
+# Пилоты H-01 на локальных моделях
 
 На открытом JavaScript-проекте проверили, что происходит со входом OpenCode при переходе в отдельную сессию задачи. Потребление во всех завершённых ответах Qwen2.5 удалось пересчитать по исходному потоку сервера. Модель не реализовала требуемые методы очереди. Экономию на принятой фиче эти данные оценить не позволяют. Для конкурсной серии остаются открыты Ф0 и независимая приёмка. [Протокол и критерии допуска](../EXPERIMENTS.md#local-h01-20261122--пилот-с-локальной-моделью-на-стадии-apply)
 
@@ -26,13 +26,24 @@
 | baseline | spec-0 | 10297 | 19 | 10316 |
 | optimized | spec-0 | 10287 | 19 | 10306 |
 
+## Qwen3 · одинаковое задание, два порядка исполнения
+
+На контроллере `73e1758` модель Qwen3-4B-Instruct-2507 смогла выполнить нативный вызов OpenCode. В первой задаче все четыре плеча запросили `/queue.mjs` вне проекта. В свежих сессиях второй задачи модель успешно читала файл по относительному пути и затем получала ошибки при редактировании. В общей сессии модель отвечала на вторую задачу на основании предыдущего отказа. Проверки на четырёх финальных снимках дали 2/2 исходных и 0/8 новых. Расход ниже относится ко всем фактически сделанным запросам. [Протокол модели](../EXPERIMENTS.md#local-q3-20261122--повтор-на-другом-профиле-после-отказа-инструментов) · [Исходные события и снимки](local-h01-qwen3.zip)
+
+| Пара | Порядок | RPT shared | RPT fresh | Запросов shared / fresh |
+|---|---|---:|---:|---:|
+| A | shared → fresh | 11 162 | 25 653 | 3 / 6 |
+| B | fresh → shared | 11 171 | 46 128 | 3 / 10 |
+
+Для повтора используйте те же флаги сервера, порт `18082`, ID `qwen3-4b-instruct-2507-q4-k-m`, файл `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` (SHA-256 `3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597`) и поле `chat_template` из исходного токенизатора (SHA-256 извлечённого текста `64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326`). [Веса Unsloth](https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/tree/a06e946bb6b655725eafa393f4a9745d460374c9) · [Токенизатор Qwen](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/cdbee75f17c01a7cc42f958dc650907174af0554/tokenizer_config.json)
+
 ## Офлайн-проверка с чистого клона
 
 Из корня репозитория на macOS под Bash или zsh. Для пересчёта нужны Node ≥22.20 и Python ≥3.11. Архивы разложены в разные каталоги, у каждого свой `SHA256SUMS`.
 
 ```sh
 proof_dir=$(mktemp -d)
-for archive in local-h01-qwen25 local-sdd-qwen25; do
+for archive in local-h01-qwen25 local-sdd-qwen25 local-h01-qwen3; do
   unzip -q "docs/probes/$archive.zip" -d "$proof_dir/$archive" || exit 1
   (cd "$proof_dir/$archive" && shasum -a 256 --check --quiet SHA256SUMS) || exit 1
 done
@@ -41,12 +52,14 @@ python3 analysis/local_context_audit.py "$apply_root"/local-h01-qwen-20261122-{a
 node scripts/attribute-pilot-history.mjs --verify bench/runs/summary/local-h01-qwen-history \
   "$apply_root"/local-h01-qwen-20261122-{a,b}
 python3 analysis/local_context_audit.py "$proof_dir/local-sdd-qwen25"/local-sdd-qwen25-20261122-{baseline,optimized}
+python3 analysis/local_context_audit.py "$proof_dir/local-h01-qwen3"/local-h01-qwen3-20261122-{a,b}
 ```
 
 | ZIP | SHA-256 файла |
 |---|---|
 | `local-h01-qwen25.zip` | `123c217b992ee40208752b8ee945e2b274d9203825fb28b27985dd830f7693e4` |
 | `local-sdd-qwen25.zip` | `3ca8e27f29e9db5f11e6dc828ad9a9912d73c99bfad8f14115925b93a70deeb8` |
+| `local-h01-qwen3.zip` | `e255b6c0ca292494a7931815b98c4f52e9dac928b61ee24f375ad6030403124e` |
 
 ## Повтор с локальным инференсом на macOS
 
