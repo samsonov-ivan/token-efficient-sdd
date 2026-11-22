@@ -4,9 +4,9 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  realpathSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -112,13 +112,24 @@ describe('isolated run lifecycle', () => {
         await expect(run(common)).rejects.toThrow(/--e0-cohorts/);
         const declaration = join(external, 'declaration.json');
         writeJson(declaration, { cohorts: {} });
-        await expect(run([...common, '--e0-cohorts', declaration])).rejects.toThrow(/M-M/);
+        const declared = [...common, '--e0-cohorts', declaration];
+        vi.stubEnv('FRUGAL_LIVE_REVIEWER_KEY', undefined);
+        await expect(run(declared)).rejects.toThrow(/FRUGAL_LIVE_REVIEWER_KEY/);
+        for (const role of ['REVIEWER', 'OWNER']) {
+          const path = join(external, `${role.toLowerCase()}.pem`);
+          const { publicKey } = generateKeyPairSync('ed25519');
+          writeFileSync(path, publicKey.export({ type: 'spki', format: 'pem' }));
+          vi.stubEnv(`FRUGAL_LIVE_${role}_KEY`, path);
+        }
+        await expect(run(declared)).rejects.toThrow(/M-M/);
         expect(launch).not.toHaveBeenCalled();
         expect(existsSync(out)).toBe(false);
       } finally {
+        vi.unstubAllEnvs();
         inspect.mockRestore();
         launch.mockRestore();
         rmSync(external, { recursive: true, force: true });
+        rmSync(project, { recursive: true, force: true });
       }
     },
   );
