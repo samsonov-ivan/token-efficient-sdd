@@ -48,13 +48,17 @@
 
 Для повтора используйте те же флаги сервера, порт `18082`, ID `qwen3-4b-instruct-2507-q4-k-m`, файл `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` (SHA-256 `3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597`) и поле `chat_template` из исходного токенизатора (SHA-256 извлечённого текста `64f85b198065d0fba2a81f37e10ed68161ce2c19a754c7100e67e0ca2ee9c326`). [Веса Unsloth](https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/tree/a06e946bb6b655725eafa393f4a9745d460374c9) · [Токенизатор Qwen](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/cdbee75f17c01a7cc42f958dc650907174af0554/tokenizer_config.json)
 
+## Qwen3 · полный конвейер
+
+Полную пару Qwen3 запустили по зарегистрированному условию после успешной реализации, на том же контроллере `1d9d86e`, что и Qwen2.5. В обоих плечах нативная стадия `spec` запросила установленный навык `openspec-propose`, инструмент вернул `ripgrep execution failed`. Модель завершила сессию до создания `proposal.md`. На обеих сторонах итог публичной проверки — API 2/2, новая функциональность 0/8. Для baseline подтверждены 2 обращения и 20 663 RPT, для optimized — 2 обращения и 20 720 RPT. Измерения стадии реализации выше не включают эти стадии полного цикла. [Оба исходных прогона, ответ инструмента и снимки](local-sdd-qwen3.zip)
+
 ## Офлайн-проверка с чистого клона
 
 Из корня репозитория на macOS под Bash или zsh. Для пересчёта нужны Node ≥22.20 и Python ≥3.11. Архивы разложены в разные каталоги, у каждого свой `SHA256SUMS`.
 
 ```sh
 proof_dir=$(mktemp -d)
-for archive in local-h01-qwen25 local-sdd-qwen25 local-h01-qwen3 local-h01-qwen3-path; do
+for archive in local-h01-qwen25 local-sdd-qwen25 local-h01-qwen3 local-h01-qwen3-path local-sdd-qwen3; do
   unzip -q "docs/probes/$archive.zip" -d "$proof_dir/$archive" || exit 1
   (cd "$proof_dir/$archive" && shasum -a 256 --check --quiet SHA256SUMS) || exit 1
 done
@@ -65,6 +69,7 @@ node scripts/attribute-pilot-history.mjs --verify bench/runs/summary/local-h01-q
 python3 analysis/local_context_audit.py "$proof_dir/local-sdd-qwen25"/local-sdd-qwen25-20261122-{baseline,optimized}
 python3 analysis/local_context_audit.py "$proof_dir/local-h01-qwen3"/local-h01-qwen3-20261122-{a,b}
 python3 analysis/local_context_audit.py "$proof_dir/local-h01-qwen3-path"/local-h01-qwen3-path-20261122-{a,b}
+python3 analysis/local_context_audit.py "$proof_dir/local-sdd-qwen3"/local-sdd-qwen3-20261122-{baseline,optimized}
 # Для проверки поведения архивного кода на macOS нужны npm ci и npm run build.
 node scripts/replay-local-quality.mjs "$proof_dir/local-h01-qwen3-path"/local-h01-qwen3-path-20261122-{a,b}
 ```
@@ -75,6 +80,7 @@ node scripts/replay-local-quality.mjs "$proof_dir/local-h01-qwen3-path"/local-h0
 | `local-sdd-qwen25.zip` | `3ca8e27f29e9db5f11e6dc828ad9a9912d73c99bfad8f14115925b93a70deeb8` |
 | `local-h01-qwen3.zip` | `e255b6c0ca292494a7931815b98c4f52e9dac928b61ee24f375ad6030403124e` |
 | `local-h01-qwen3-path.zip` | `3d69c87ac18bdcb79d547b3f911c5d3090d3df9600daf405d8d70d35cf501216` |
+| `local-sdd-qwen3.zip` | `3f38b3f34e64f1c8a0e7be21b6e3df540e5dac3710a89fc83af59b9de5b442e1` |
 
 ## Повтор с локальным инференсом на macOS
 
