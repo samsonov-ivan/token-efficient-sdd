@@ -1,7 +1,10 @@
 export const fixtureName = 'synthetic-git-log';
 export const fixtureCommand = 'git log --oneline';
 export const archivePath = /^Full output \(project root\): (\.frugal\/logs\/([a-f0-9]{64})\.log)$/m;
-export const targetSubject = 'Public fixture example no. 12';
+const commitCount = 24;
+const subjectPrefix = 'Public fixture example no.';
+export const targetSubject = `${subjectPrefix} 12`;
+export const newestSubject = `${subjectPrefix} ${commitCount - 1}`;
 export const fixtureDates = {
   GIT_AUTHOR_DATE: '2026-11-21T00:00:00Z',
   GIT_COMMITTER_DATE: '2026-11-21T00:00:00Z',
@@ -9,7 +12,7 @@ export const fixtureDates = {
 
 export async function createHistory(git) {
   await git('init', '-q', '--object-format=sha1');
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < commitCount; i++) {
     await git(
       '-c',
       'user.email=fixture@example.test',
@@ -18,7 +21,7 @@ export async function createHistory(git) {
       'commit',
       '--allow-empty',
       '-qm',
-      `Public fixture example no. ${i}`,
+      `${subjectPrefix} ${i}`,
     );
   }
 }
