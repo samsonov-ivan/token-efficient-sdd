@@ -52,13 +52,15 @@
 
 Полную пару Qwen3 запустили по зарегистрированному условию после успешной реализации, на том же контроллере `1d9d86e`, что и Qwen2.5. В обоих плечах нативная стадия `spec` запросила установленный навык `openspec-propose`, инструмент вернул `ripgrep execution failed`. Модель завершила сессию до создания `proposal.md`. На обеих сторонах итог публичной проверки — API 2/2, новая функциональность 0/8. Для baseline подтверждены 2 обращения и 20 663 RPT, для optimized — 2 обращения и 20 720 RPT. Измерения стадии реализации выше не включают эти стадии полного цикла. [Оба исходных прогона, ответ инструмента и снимки](local-sdd-qwen3.zip)
 
+После исправления контроллера в `270c3e9` OpenCode получил локальный ripgrep 15.2.0, SHA-256 `c9a2697f2b817d0a80e2b35f9c5ca1f58fa2c903418120f42fed60dcd9b0988e`. Нативное открытие навыка подтвердилось в обоих живых плечах. В каждом модель создала proposal, design и одну спецификацию. К концу десяти шагов файл `tasks.md` отсутствовал. Стадии реализации, ревью и verify не начались. Расход baseline — 169 464 RPT, optimized — 170 409 RPT, по десять запросов. Обе финальные копии прошли 2/2 исходных и 0/8 новых проверок. Следующая проверяемая гипотеза — отдельный увеличенный лимит шагов стадии spec с сохранением общего бюджета, требований и тестов. [Протокол](../EXPERIMENTS.md#local-q3-skill-20261122--повтор-после-восстановления-зависимости) · [События и файлы обеих попыток](local-sdd-qwen3-skill.zip)
+
 ## Офлайн-проверка с чистого клона
 
 Из корня репозитория на macOS под Bash или zsh. Для пересчёта нужны Node ≥22.20 и Python ≥3.11. Архивы разложены в разные каталоги, у каждого свой `SHA256SUMS`.
 
 ```sh
 proof_dir=$(mktemp -d)
-for archive in local-h01-qwen25 local-sdd-qwen25 local-h01-qwen3 local-h01-qwen3-path local-sdd-qwen3; do
+for archive in local-h01-qwen25 local-sdd-qwen25 local-h01-qwen3 local-h01-qwen3-path local-sdd-qwen3 local-sdd-qwen3-skill; do
   unzip -q "docs/probes/$archive.zip" -d "$proof_dir/$archive" || exit 1
   (cd "$proof_dir/$archive" && shasum -a 256 --check --quiet SHA256SUMS) || exit 1
 done
@@ -70,6 +72,7 @@ python3 analysis/local_context_audit.py "$proof_dir/local-sdd-qwen25"/local-sdd-
 python3 analysis/local_context_audit.py "$proof_dir/local-h01-qwen3"/local-h01-qwen3-20261122-{a,b}
 python3 analysis/local_context_audit.py "$proof_dir/local-h01-qwen3-path"/local-h01-qwen3-path-20261122-{a,b}
 python3 analysis/local_context_audit.py "$proof_dir/local-sdd-qwen3"/local-sdd-qwen3-20261122-{baseline,optimized}
+python3 analysis/local_context_audit.py "$proof_dir/local-sdd-qwen3-skill"/local-sdd-qwen3-skill-20261122-{baseline,optimized}
 # Для проверки поведения архивного кода на macOS нужны npm ci и npm run build.
 node scripts/replay-local-quality.mjs "$proof_dir/local-h01-qwen3-path"/local-h01-qwen3-path-20261122-{a,b}
 ```
@@ -81,6 +84,7 @@ node scripts/replay-local-quality.mjs "$proof_dir/local-h01-qwen3-path"/local-h0
 | `local-h01-qwen3.zip` | `e255b6c0ca292494a7931815b98c4f52e9dac928b61ee24f375ad6030403124e` |
 | `local-h01-qwen3-path.zip` | `3d69c87ac18bdcb79d547b3f911c5d3090d3df9600daf405d8d70d35cf501216` |
 | `local-sdd-qwen3.zip` | `3f38b3f34e64f1c8a0e7be21b6e3df540e5dac3710a89fc83af59b9de5b442e1` |
+| `local-sdd-qwen3-skill.zip` | `afb98e4c1a7af78b142683847c06bc56c62479081959f43ffa7aba109f81bff3` |
 
 ## Повтор с локальным инференсом на macOS
 
