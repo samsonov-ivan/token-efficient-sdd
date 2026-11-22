@@ -1,0 +1,105 @@
+{
+  "kind": "shared-apply-task-2-message-history",
+  "tokenization": {
+    "add_special": true,
+    "parse_special": true
+  },
+  "archives": [
+    {
+      "archive": "local-h01-qwen-20261122-a",
+      "model": "qwen2.5-coder-7b-instruct-q4-k-m",
+      "controller_commit": "73e1758ac5e23907a064e5a3ca4e949af8fc8e9c",
+      "requests": 1,
+      "repeated_message_occurrences": 2,
+      "repeated_wire_bytes": 1159,
+      "history_token_delta": 275,
+      "rows": [
+        {
+          "attempt": "0001",
+          "exact_fresh_request": {
+            "attempt": "0001",
+            "request_sha256": "ba909e90e5ddc6e045eee65d5f895cb782aaeb8ac2f965aadbcbd4aa1da05084",
+            "response_sha256": "c507f35da958b1213ef877960d81ae5c7f311be3676968d49760c08be1fdf376",
+            "provider_prompt_tokens": 3433
+          },
+          "request_sha256": "b0e655a8f6a3518c8fe9f1fb0ad4ed3575cc0841e52db627d42501cf04802e82",
+          "response_sha256": "1fc6f4a50eeac0e1f117e8e42a8ffa6e178367fa917da27bbf571d3e3e91e29b",
+          "clipped_request_sha256": "ba909e90e5ddc6e045eee65d5f895cb782aaeb8ac2f965aadbcbd4aa1da05084",
+          "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487",
+          "removed_range": [
+            1,
+            3
+          ],
+          "removed_roles": [
+            "user",
+            "assistant"
+          ],
+          "removed_sha256": "dc3d64ed773f2640391a7e2096db4afa147004af923bbc448c85f3b82c268164",
+          "removed_message_count": 2,
+          "removed_wire_bytes": 1159,
+          "provider_prompt_tokens": 3708,
+          "full": {
+            "tokens": 3708,
+            "render_sha256": "60d2af5dc6d9026f15f2324b572186799fcec4022a5ef724f99646d7bcff8047",
+            "token_ids_sha256": "8e2b1ee076a170672fc64723a619c4468d1e793dfe0349e2cc0f710eba289fa5"
+          },
+          "clipped": {
+            "tokens": 3433,
+            "render_sha256": "d6d5482fc21e6abc7eae7f6fb313692e80b09cd97fffe1b656aa609e52132df0",
+            "token_ids_sha256": "336fdb995e0305db5b58994a6d5fd2fc1a270c878b050a384b6497a1ed2522a7"
+          },
+          "full_render_matches_provider": true,
+          "history_token_delta": 275
+        }
+      ]
+    },
+    {
+      "archive": "local-h01-qwen-20261122-b",
+      "model": "qwen2.5-coder-7b-instruct-q4-k-m",
+      "controller_commit": "73e1758ac5e23907a064e5a3ca4e949af8fc8e9c",
+      "requests": 1,
+      "repeated_message_occurrences": 2,
+      "repeated_wire_bytes": 1159,
+      "history_token_delta": 274,
+      "rows": [
+        {
+          "attempt": "0001",
+          "exact_fresh_request": {
+            "attempt": "0001",
+            "request_sha256": "c1c7678de140f6224261171232ef00831f4afa2aca9ba0a3df43349550647a2b",
+            "response_sha256": "abb3d849aca03d68f7634c1e6e1b2eead866a35fbb108d1db62e1f127aa05de8",
+            "provider_prompt_tokens": 3432
+          },
+          "request_sha256": "b62fc58a18b4226a8613cbec9f2dcf3a4e080168fe27d423417f9744d61340fe",
+          "response_sha256": "b286ba4636b04d891e04f0b5c63162fa8958510554e56493229247d24c80a4b1",
+          "clipped_request_sha256": "c1c7678de140f6224261171232ef00831f4afa2aca9ba0a3df43349550647a2b",
+          "tools_sha256": "9d11ae1e57f4019fa640cfd9f20d7f151296d8d4b87e1c754dad2d1c99054487",
+          "removed_range": [
+            1,
+            3
+          ],
+          "removed_roles": [
+            "user",
+            "assistant"
+          ],
+          "removed_sha256": "6c78fea512e098e1e719bb1af958a48e5a2ae1436a463843626d8383fd16e130",
+          "removed_message_count": 2,
+          "removed_wire_bytes": 1159,
+          "provider_prompt_tokens": 3706,
+          "full": {
+            "tokens": 3706,
+            "render_sha256": "1f7f8afc357aa8fa41159d25c79ad3222d85f570499456f9b305b32779a6b4c5",
+            "token_ids_sha256": "d3d75b5ae59ea12c137a621532052d5ff413feb5f1b2a5fec6128eab7219e1a9"
+          },
+          "clipped": {
+            "tokens": 3432,
+            "render_sha256": "229fc3082935d664addc4b4761bf63cfe478891a89f4c4bdb87a65e7dc6375a9",
+            "token_ids_sha256": "5a4a4ae1ba3012b6b0b4e05962cb4cd77eaf1f45860d0cd7a4fea9338f5fa7f9"
+          },
+          "full_render_matches_provider": true,
+          "history_token_delta": 274
+        }
+      ]
+    }
+  ]
+}
