@@ -4,6 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/p
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { setTimeout as pause } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { goCatalog, goURL, validSubscriptionLedger } from '../packages/cli/dist/harness/go.js';
 import { checked, command, digest, now, readJson, writeJson } from '../packages/cli/dist/harness/io.js';
@@ -23,17 +24,20 @@ import {
   fixtureCommand,
   fixtureDates,
   fixtureName,
+  newestSubject,
   targetSubject,
 } from './lib/h03-fixture.mjs';
 
-const [mode, output, tag, rehearsal, ...extra] = process.argv.slice(2);
+const [mode, output, tag, ...scenarioArgs] = process.argv.slice(2);
+const latest = scenarioArgs.at(-1) === '--latest';
+const [rehearsal, ...extra] = latest ? scenarioArgs.slice(0, -1) : scenarioArgs;
 const dry = mode === '--dry-run';
 assert(
   output && tag && extra.length === 0 &&
     ((dry && !rehearsal) || (mode === '--live-extra-usage-off' && rehearsal)),
-  'Usage: node scripts/probe-compression-go.mjs --dry-run OUTPUT_DIR IMAGE\n' +
+  'Usage: node scripts/probe-compression-go.mjs --dry-run OUTPUT_DIR IMAGE [--latest]\n' +
     'Live ($0 balance only): node scripts/probe-compression-go.mjs ' +
-    '--live-extra-usage-off OUTPUT_DIR IMAGE DRY_RUN_DIR',
+    '--live-extra-usage-off OUTPUT_DIR IMAGE DRY_RUN_DIR [--latest]',
 );
 const project = dirname(dirname(fileURLToPath(import.meta.url)));
 const plugin = join(project, 'packages/opencode-plugin/dist/index.js');
@@ -43,7 +47,13 @@ const provider = 'opencode-go';
 const modelId = 'deepseek-v4.1-flash';
 const model = `${provider}/${modelId}`;
 const variant = 'max';
-const prompt = [
+const scenario = latest ? 'newest-visible' : 'archive-recovery';
+const subject = latest ? newestSubject : targetSubject;
+const prompt = latest ? [
+  `Run \`${fixtureCommand}\` exactly once in the current repository.`,
+  'From the tool result, find the newest commit, which is on the first line of the history.',
+  'Do not use any other tools. In your final answer output just its seven-character commit hash.',
+].join(' ') : [
   `Run \`${fixtureCommand}\` exactly once in the current repository.`,
   `Find the commit whose exact subject is "${targetSubject}".`,
   'If the result lists a full-output archive and the commit is omitted, use the read tool once',
@@ -53,6 +63,7 @@ const prompt = [
 const image = await Container.imageID(tag);
 const inputs = {
   fixture: fixtureName,
+  scenario,
   prompt_sha256: digest(prompt),
   runner_sha256: digest(await readFile(fileURLToPath(import.meta.url))),
   fixture_code_sha256: digest(await readFile(join(project, 'scripts/lib/h03-fixture.mjs'))),
@@ -76,6 +87,19 @@ const catalog = dry ? { limits: { context: 131072, output: 8192 } } : await goCa
 const root = await mkdtemp(join(tmp, 'f-h03-'));
 // Recreate the complete mount between arms while keeping model-visible paths identical.
 const arm = join(root, 'arm');
+
+async function removeMount(path) {
+  // Docker Desktop can briefly retain a directory after the container exits.
+  for (let remaining = 10; ; remaining--) {
+    try {
+      await rm(path, { recursive: true, force: true, maxRetries: 3 });
+      return;
+    } catch (error) {
+      if (remaining === 0 || error.code !== 'EACCES') throw error;
+      await pause(250);
+    }
+  }
+}
 
 function callTool(name, args, step) {
   return {
@@ -119,15 +143,19 @@ async function fixtureProvider(repo, original, expectedCommit) {
         assert.equal(typeof result, 'string');
         const archive = archivePath.exec(result);
         if (archive) {
-          assert(tools.includes('read'));
           assert.equal(archive[2], digest(original));
-          assert(!result.includes(expectedCommit));
-          tool = callTool('read', { filePath: join(repo, archive[1]) }, step);
+          if (latest) assert(result.includes(expectedCommit));
+          else {
+            assert(tools.includes('read'));
+            assert(!result.includes(expectedCommit));
+            tool = callTool('read', { filePath: join(repo, archive[1]) }, step);
+          }
         } else assert.equal(result, original);
       } else {
+        assert(!latest);
         assert.equal(step, 3);
         assert.equal(results.length, 2);
-        assert(results[1].content.includes(`${expectedCommit} ${targetSubject}`));
+        assert(results[1].content.includes(`${expectedCommit} ${subject}`));
       }
       const payload = {
         id: `fixture-${step}`,
@@ -176,7 +204,8 @@ async function fixtureProvider(repo, original, expectedCommit) {
 async function checkArchive(events, repo, raw, original, compressed, expectedCommit) {
   assert(!events.some((event) => event.type === 'error'), 'OpenCode reported an error');
   const tools = events.filter((event) => event.type === 'tool_use').map((event) => event.part);
-  assert.deepEqual(tools.map((tool) => tool.tool), compressed ? ['bash', 'read'] : ['bash']);
+  const recovered = compressed && !latest;
+  assert.deepEqual(tools.map((tool) => tool.tool), recovered ? ['bash', 'read'] : ['bash']);
   const [shell, read] = tools.map((tool) => tool.state);
   assert.equal(shell.input.command, fixtureCommand);
   assert.equal(shell.status, 'completed');
@@ -195,13 +224,15 @@ async function checkArchive(events, repo, raw, original, compressed, expectedCom
   assert.equal(archive?.[2], source_sha256, 'Archive path must encode the source hash');
   assert.equal(shell.metadata?.frugalToolOutputSha256, source_sha256);
   assert(shell_output_bytes < Buffer.byteLength(original));
-  assert(!shell.output.includes(expectedCommit));
+  assert.equal(shell.output.includes(expectedCommit), latest);
   const file = join(repo, archive[1]);
   const stored = safeFile(repo, file);
   assert.deepEqual(stored, Buffer.from(original));
-  assert.equal(read.status, 'completed');
-  assert.equal(resolve(repo, read.input.filePath), file);
-  assert(read.output.includes(`${expectedCommit} ${targetSubject}`));
+  if (recovered) {
+    assert.equal(read.status, 'completed');
+    assert.equal(resolve(repo, read.input.filePath), file);
+    assert(read.output.includes(`${expectedCommit} ${subject}`));
+  }
   const archive_file = join('raw', 'full-git-log.txt');
   await writeFile(join(dirname(raw), archive_file), stored, { flag: 'wx', mode: 0o600 });
   return {
@@ -210,6 +241,7 @@ async function checkArchive(events, repo, raw, original, compressed, expectedCom
     commit: actualCommit,
     archive_sha256: digest(stored),
     archive: archive_file,
+    archive_recovered_in_session: recovered,
   };
 }
 
@@ -218,14 +250,15 @@ async function probe(branch) {
   const repo = join(arm, 'repo');
   const runDir = join(dest, branch);
   const raw = join(runDir, 'raw');
-  const runId = `${basename(dest)}-${branch}`;
+  const series = basename(dest);
+  const runId = basename(runDir);
   const started = now();
   const env = runnerEnvironment(arm);
   env.FRUGAL_USAGE_CORRELATION = '1';
   env.npm_config_offline = 'true';
   env.npm_config_fetch_retries = '0';
   env.FRUGAL_TOOL_OUTPUT_COMPRESSION = compressed ? '1' : '0';
-  const context = new Container(arm, repo, env, image, runId);
+  const context = new Container(arm, repo, env, image, `${series}-${runId}`);
   await mkdir(repo);
   await mkdir(raw, { recursive: true, mode: 0o700 });
   try {
@@ -237,7 +270,8 @@ async function probe(branch) {
     assert.equal(await checked(context.exec(['opencode', '--version'])), version);
     const runnerNode = await checked(context.exec(['node', '--version']));
     const original = (await context.exec(['git', 'log', '--oneline'])).stdout;
-    const target = original.split('\n').find((line) => line.endsWith(` ${targetSubject}`));
+    const target = original.split('\n').find((line) => line.endsWith(` ${subject}`));
+    if (latest) assert.equal(target, original.split('\n', 1)[0]);
     const expectedCommit = target?.split(' ')[0];
     assert.match(expectedCommit ?? '', /^[a-f0-9]{7}$/);
     await writeFile(join(raw, 'fixture-git-log.txt'), original, { mode: 0o600 });
@@ -290,6 +324,7 @@ async function probe(branch) {
       kind: 'meter-smoke',
       purpose: 'h03-compression-technical-probe',
       run_id: runId,
+      series,
       pair_id: null,
       branch,
       dry_run: dry,
@@ -320,7 +355,7 @@ async function probe(branch) {
     assert(meter.complete, meter.issues.join('\n'));
     assert.equal(meter.cost, 0);
     assert.equal(meter.relay.relative_discrepancy, 0);
-    assert.equal(meter.call_count, compressed ? 3 : 2);
+    assert.equal(meter.call_count, compressed && !latest ? 3 : 2);
     const archive = await checkArchive(events, repo, raw, original, compressed, expectedCommit);
     manifest.status = 'complete';
     writeJson(join(runDir, 'manifest.json'), manifest);
@@ -336,7 +371,7 @@ async function probe(branch) {
       },
     };
   } finally {
-    await rm(arm, { recursive: true, force: true });
+    await removeMount(arm);
   }
 }
 
@@ -357,5 +392,5 @@ try {
   });
   console.log(join(dest, 'summary.json'));
 } finally {
-  await rm(root, { recursive: true, force: true });
+  await removeMount(root);
 }
