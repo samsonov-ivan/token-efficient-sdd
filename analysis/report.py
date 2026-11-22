@@ -595,9 +595,75 @@ def report_baseline(a, out):
     return parts
 
 
+def h03_live_results(summary):
+    scenarios = (
+        ("newest", "newest-visible", "новейший коммит"),
+        ("recovery", "archive-recovery", "чтение архива"),
+    )
+    results = []
+    for name, scenario, title in scenarios:
+        path = summary / f"h03-go-{name}-20261122.json"
+        if not path.is_file():
+            continue
+        try:
+            evidence = read_json(path)
+            inputs = evidence["inputs"]
+            model, variant = inputs["model"], inputs["variant"]
+            base, opt = evidence["baseline"], evidence["compressed"]
+            base_usage, opt_usage = base["usage"], opt["usage"]
+            before, after = base_usage["rpt"], opt_usage["rpt"]
+            base_calls, opt_calls = base_usage["call_count"], opt_usage["call_count"]
+            digest, answer = base["source_sha256"], base["commit"]
+            base_charge, opt_charge = (
+                base_usage["balance_charge"],
+                opt_usage["balance_charge"],
+            )
+            if (
+                evidence["kind"] != "h03-compression-technical-probe"
+                or evidence["mode"] != "live-go"
+                or evidence["complete"] is not True
+                or evidence["scored_feature_pair"] is not False
+                or inputs["fixture"] != "synthetic-git-log"
+                or inputs["scenario"] != scenario
+                or not isinstance(model, str)
+                or not model.startswith("opencode-go/")
+                or not isinstance(variant, str)
+                or not all(
+                    type(value) is int and value > 0
+                    for value in (before, after, base_calls, opt_calls)
+                )
+                or not re.fullmatch(r"[a-f0-9]{64}", digest)
+                or not re.fullmatch(r"[a-f0-9]{7}", answer)
+                or digest != opt["source_sha256"]
+                or digest != opt["archive_sha256"]
+                or answer != opt["commit"]
+                or opt["archive_recovered_in_session"]
+                is not (scenario == "archive-recovery")
+                or not all(
+                    type(charge) in (int, float) and charge == 0
+                    for charge in (base_charge, opt_charge)
+                )
+            ):
+                continue
+        except (KeyError, TypeError, ValueError):
+            continue
+        delta = after - before
+        results.append(
+            (
+                f"H-03 · живой контроль Go · {title}",
+                f"{model} ({variant}), открытая фикстура вне зачёта. "
+                f"RPT {before} → {after} ({delta:+d}, {delta / before:+.2%}), "
+                f"вызовы {base_calls} → {opt_calls}, списание ${base_charge + opt_charge:g}. "
+                "Ответы совпали, SHA-256 полного лога подтверждён.",
+                path,
+            )
+        )
+    return results
+
+
 def prototype_results(root):
     summary = root / "summary"
-    results = []
+    results = h03_live_results(summary)
     path = summary / "h03-native-loopback.json"
     if path.is_file():
         evidence = read_json(path)

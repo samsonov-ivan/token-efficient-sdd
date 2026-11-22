@@ -433,3 +433,50 @@ def test_archived_baseline_dashboard_only_shows_verified_usage(tmp_path):
     assert "private-detail" not in dashboard
     assert "<meter" not in dashboard
     assert "400 RPT" not in dashboard
+
+
+def test_h03_live_probe_reports_both_signed_changes_outside_scored_pairs(tmp_path):
+    root = tmp_path / "runs"
+    summaries = root / "summary"
+    summaries.mkdir(parents=True)
+    digest = "a" * 64
+    for label, scenario, recovery, after, calls in (
+        ("newest", "newest-visible", False, 95, 2),
+        ("recovery", "archive-recovery", True, 120, 3),
+    ):
+        source = {"source_sha256": digest, "commit": "abcdef0"}
+        save(
+            summaries / f"h03-go-{label}-20261122.json",
+            {
+                "kind": "h03-compression-technical-probe",
+                "mode": "live-go",
+                "complete": True,
+                "scored_feature_pair": False,
+                "inputs": {
+                    "fixture": "synthetic-git-log",
+                    "scenario": scenario,
+                    "model": "opencode-go/example",
+                    "variant": "max",
+                },
+                "baseline": {
+                    **source,
+                    "usage": {"rpt": 100, "call_count": 2, "balance_charge": 0},
+                },
+                "compressed": {
+                    **source,
+                    "archive_sha256": digest,
+                    "archive_recovered_in_session": recovery,
+                    "usage": {"rpt": after, "call_count": calls, "balance_charge": 0},
+                },
+            },
+        )
+    out = tmp_path / "output"
+    report.write_report(root, out)
+    for filename in ("REPORT.md", "dashboard.html"):
+        contents = (out / filename).read_text(encoding="utf-8")
+        assert "RPT 100 → 95 (-5, -5.00%), вызовы 2 → 2, списание $0" in contents
+        assert "RPT 100 → 120 (+20, +20.00%), вызовы 2 → 3, списание $0" in contents
+        assert contents.count("открытая фикстура вне зачёта") == 2
+    assert "Экономия токенов на полной фиче пока не подтверждена" in (
+        out / "REPORT.md"
+    ).read_text(encoding="utf-8")
