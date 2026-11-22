@@ -1,0 +1,56 @@
+{
+  "kind": "h03-compression-technical-probe",
+  "mode": "live-go",
+  "scored_feature_pair": false,
+  "complete": true,
+  "max_balance_charge": 0,
+  "inputs": {
+    "fixture": "synthetic-git-log",
+    "scenario": "newest-visible",
+    "prompt_sha256": "6ea695792813d3231581665acdfe1d6ae74f9c201cb01416f7da62c5c9efe4c1",
+    "runner_sha256": "45e59ce9ed7b6e462da74681d26dad4b1a539e232a68175631de32dca79990d8",
+    "fixture_code_sha256": "15cccdb1591b422f3b772577a0dfa0dd0db112bec9b0be0730b516dd9edce0a6",
+    "plugin_sha256": "c377801b408513a863840129f1f1bbf8331b2d68cad4e11ca876ca9377abe7fd",
+    "opencode": "1.19.6",
+    "image": "sha256:8d40a7050991b0ecb3ff6d7e8fc7155e307817c070d6eb33b203a03095ca447e",
+    "model": "opencode-go/deepseek-v4.1-flash",
+    "variant": "max"
+  },
+  "baseline": {
+    "source_sha256": "d03316d3584db365900a9d3824fdf2191d83b7608a92bfb7b1c965d1a18fea93",
+    "shell_output_bytes": 902,
+    "commit": "0eab02f",
+    "meter": "base/meter.json",
+    "usage": {
+      "call_count": 2,
+      "rpt": 8459,
+      "t_in": 2607,
+      "t_cache_read": 5760,
+      "t_cache_write": 0,
+      "t_out": 49,
+      "t_reasoning": 43,
+      "balance_charge": 0,
+      "subscription_allowance": 0.00027812
+    }
+  },
+  "compressed": {
+    "source_sha256": "d03316d3584db365900a9d3824fdf2191d83b7608a92bfb7b1c965d1a18fea93",
+    "shell_output_bytes": 486,
+    "commit": "0eab02f",
+    "archive_sha256": "d03316d3584db365900a9d3824fdf2191d83b7608a92bfb7b1c965d1a18fea93",
+    "archive": "raw/full-git-log.txt",
+    "archive_recovered_in_session": false,
+    "meter": "opt/meter.json",
+    "usage": {
+      "call_count": 2,
+      "rpt": 8332,
+      "t_in": 2485,
+      "t_cache_read": 5760,
+      "t_cache_write": 0,
+      "t_out": 49,
+      "t_reasoning": 38,
+      "balance_charge": 0,
+      "subscription_allowance": 0.00026534
+    }
+  }
+}
