@@ -6,20 +6,28 @@
 
 ## Запуск прототипа
 
-Из корня checkout используйте Node из `.node-version`, Python ≥3.11, uv, Git и sqlite3. Парная репетиция запускается без ключей и внешней модели. Новый каталог сохраняет исходные события, отчёт и дашборд.
+Для запуска нужны Git, Node.js 24.15.0 (версия в [`.node-version`](.node-version)), npm и Python 3.11+ для отчёта. `npm ci` загрузит закреплённые зависимости. После установки парная репетиция работает локально, без Docker, API-ключей и обращений к модельному провайдеру.
+
+Склонируйте ветку с прототипом. Если она уже открыта локально, выполняйте команды с `npm ci` из корня проекта.
 
 ```bash
+git clone --branch codex/frugal-integration https://github.com/samsonov-ivan/token-efficient-sdd.git frugal
+cd frugal
 npm ci
 npm run build
-demo_dir=$(mktemp -d)
+demo_dir=$(mktemp -d "${TMPDIR:-/tmp}/frugal-demo.XXXXXX")
 node_modules/.bin/frugal run --mode paired --feature add-transfer-limits \
   --flag session_per_task --dry-run --series prototype --out "$demo_dir/runs"
 node scripts/replay.mjs "$demo_dir/runs"
 node_modules/.bin/frugal report "$demo_dir/runs" --out "$demo_dir/report"
-ls "$demo_dir/report"
+printf '%s\n' "$demo_dir/report/REPORT.md" "$demo_dir/report/dashboard.html"
 ```
 
-Откройте `REPORT.md` и `dashboard.html` в `$demo_dir/report`. Парная репетиция проверяет изоляцию, создание артефактов и воспроизводимость учёта. Измеренная экономия на живой паре пока не установлена. [Контур качества](docs/QUALITY.md) · [состояние живых прогонов](docs/STATE.md)
+Откройте напечатанный путь к `REPORT.md` или `dashboard.html`. В `$demo_dir/runs` появятся два каталога, `prototype-1-base-a1` и `prototype-1-opt-a1`. В каждом лежат `manifest.json`, журнал запросов `calls.jsonl` и сводка по стадиям `stages.csv`. `replay.mjs` пересчитает сохранённые события и выведет по строке на плечо. У успешной репетиции `status: complete` и `dry_run: true`. Результаты репетиции получены на `mock/replay`. [Живые эксперименты](docs/EXPERIMENTS.md) · [контур качества](docs/QUALITY.md)
+
+Если генератор отчёта не находит подходящий Python, задайте `FRUGAL_PYTHON` с путём к исполняемому файлу Python 3.11 или новее.
+
+### Дополнительные проверки
 
 Открытая фикстура с включёнными оптимизациями проверяет выдачу капсул, инкрементальное ревью после правки и полную проверку итогового состояния. Её можно вызвать отдельно.
 
@@ -34,7 +42,11 @@ node_modules/.bin/vitest run packages/cli/tests/run.test.ts \
 
 Запись показа с отдельными сессиями задач, капсулами, структурированным ревью и проверкой сжатия можно собрать из открытой фикстуры. [Команды записи](docs/VIDEO.md#показ-прототипа-на-открытой-фикстуре)
 
-Разработчикам доступны `npm test` и `npm run test:analysis`. Если у вас есть архив живых попыток, пересчитайте его теми же командами `scripts/replay.mjs` и `frugal report`, передав путь к архиву. [Измеритель и экспорт](docs/METER.md) · [замороженный B0](docs/baseline/B0.md) · [контроли демо-репозитория](bench/features/QA.md)
+Разработчикам доступны `npm test` и `npm run test:analysis` (для тестов анализа установите uv). Если у вас есть архив живых попыток, пересчитайте его теми же командами `scripts/replay.mjs` и `frugal report`, передав путь к архиву. Для чтения сохранённых баз OpenCode нужен `sqlite3` в `PATH`. [Измеритель и экспорт](docs/METER.md) · [замороженный B0](docs/baseline/B0.md) · [контроли демо-репозитория](bench/features/QA.md)
+
+### Запуск с реальной моделью
+
+Живой прогон требует Docker, доступа к выбранной модели и отдельной среды проверки качества. В инструкции раннера описаны сборка контейнера, параметры провайдера, обязательная репетиция с теми же входами и независимая приёмка. [Инструкция раннера](tools/runner/README.md) · [состояние измерений](docs/STATE.md)
 
 ## Как запустить разработку
 
